@@ -1,0 +1,28 @@
+/*
+  V1 - Initial board communication test
+
+  Historical result:
+  Upload failed during the initial configuration attempts.
+
+  Observed errors included:
+  - Device not configured
+  - No DFU capable USB device available
+
+  The sketch itself is a valid serial test.
+  The failure was related to upload configuration or connection.
+*/
+
+unsigned long counter = 0;
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+}
+
+void loop() {
+  Serial.print("ESP32-S3-Zero is running! Count: ");
+  Serial.println(counter);
+
+  counter++;
+  delay(1000);
+}
