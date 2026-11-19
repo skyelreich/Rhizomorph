@@ -1,0 +1,3919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mycelium Grid & Tactile Model</title>
+
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #060e0c;
+    --panel: rgba(10, 22, 19, .92);
+    --field: #050d0b;
+    --ink: #e8f4ee;
+    --muted: #9bbdae;
+    --line: rgba(77, 232, 180, .26);
+    --line-strong: rgba(77, 232, 180, .6);
+    --accent: #4de8b4;
+    --gold: #d4ae5a;
+    --warn: #ffb454;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    background:
+      radial-gradient(
+        1200px 700px at 85% -10%,
+        rgba(77, 232, 180, .08),
+        transparent 60%
+      ),
+      radial-gradient(
+        900px 600px at -10% 100%,
+        rgba(212, 174, 90, .07),
+        transparent 60%
+      ),
+      var(--bg);
+  }
+
+  #bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    max-width: 1180px;
+    margin: auto;
+    padding: 30px 18px 70px;
+  }
+
+  .hero {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .hero svg {
+    flex: none;
+    width: 92px;
+    height: 92px;
+  }
+
+  h1 {
+    margin: 0;
+    font: 700 28px/1.2 var(--mono);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  h1 span {
+    color: var(--accent);
+  }
+
+  .sub {
+    margin: 8px 0 0;
+    max-width: 760px;
+    color: var(--muted);
+  }
+
+  section {
+    position: relative;
+    margin: 20px 0;
+    padding: 22px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    backdrop-filter: blur(5px);
+    border-radius: 3px;
+  }
+
+  section::before,
+  section::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--accent);
+    pointer-events: none;
+  }
+
+  section::before {
+    top: -1px;
+    left: -1px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  section::after {
+    right: -1px;
+    bottom: -1px;
+    border-top: 0;
+    border-left: 0;
+  }
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 16px;
+    color: var(--accent);
+    font: 700 15px/1.3 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  h2::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    flex: none;
+    background: var(--gold);
+    clip-path: polygon(
+      50% 0, 100% 25%, 100% 75%,
+      50% 100%, 0 75%, 0 25%
+    );
+  }
+
+  h2 em {
+    color: var(--gold);
+    font-style: normal;
+  }
+
+  .grp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 24px 0 12px;
+    color: var(--gold);
+    font: 13px/1.3 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .grp::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: linear-gradient(90deg, var(--line), transparent);
+  }
+
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px 18px;
+  }
+
+  .fld {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .fld > span {
+    color: var(--ink);
+  }
+
+  .fld small,
+  .note {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .note {
+    margin: 10px 0 0;
+  }
+
+  .warn {
+    color: var(--warn);
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+  }
+
+  input::placeholder {
+    color: #5f7d70;
+  }
+
+  input:focus,
+  select:focus,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+
+  input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    accent-color: var(--accent);
+  }
+
+  .inline-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 14px;
+  }
+
+  button {
+    padding: 11px 15px;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--ink);
+    font: 600 14px/1.2 var(--mono);
+    cursor: pointer;
+  }
+
+  button:hover {
+    background: rgba(77, 232, 180, .1);
+  }
+
+  button.primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #04120d;
+  }
+
+  button.primary:hover {
+    box-shadow: 0 0 18px rgba(77, 232, 180, .3);
+  }
+
+  button:disabled {
+    opacity: .4;
+    cursor: default;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 15px;
+  }
+
+  .drop {
+    padding: 26px;
+    text-align: center;
+    color: var(--muted);
+    border: 1px dashed var(--line-strong);
+    background: repeating-linear-gradient(
+      135deg,
+      transparent 0 14px,
+      rgba(77, 232, 180, .035) 14px 15px
+    );
+  }
+
+  .drop.over {
+    border-color: var(--gold);
+    background-color: rgba(212, 174, 90, .08);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  th {
+    padding: 9px 8px;
+    color: var(--muted);
+    text-align: left;
+    font: 12px/1.4 var(--mono);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  td {
+    padding: 8px;
+    border-top: 1px solid var(--line);
+  }
+
+  tr.sel td {
+    background: rgba(77, 232, 180, .1);
+  }
+
+  td.name {
+    cursor: pointer;
+    word-break: break-all;
+  }
+
+  td input {
+    max-width: 110px;
+  }
+
+  td button {
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+
+  #imgPanel {
+    margin-top: 18px;
+    padding: 15px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    background: rgba(212, 174, 90, .04);
+  }
+
+  #imgPanel h3 {
+    margin: 0;
+    color: var(--gold);
+    font: 700 14px/1.4 var(--mono);
+    word-break: break-all;
+  }
+
+  .previews {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  figure {
+    margin: 0;
+  }
+
+  figcaption {
+    margin-bottom: 8px;
+    color: var(--muted);
+    font: 13px/1.3 var(--mono);
+    text-transform: uppercase;
+  }
+
+  canvas.pv {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #000;
+    border: 1px solid var(--line);
+  }
+
+  .progress {
+    height: 6px;
+    margin-top: 16px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, .08);
+  }
+
+  .progress > div {
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+  }
+
+  .results a {
+    display: block;
+    padding: 4px 0;
+    color: var(--accent);
+    word-break: break-all;
+    font-size: 14px;
+  }
+
+  .model-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(250px, 1fr);
+    gap: 18px;
+    margin-top: 18px;
+  }
+
+  #canvas3d {
+    height: 440px;
+    position: relative;
+    border: 1px solid var(--line);
+    background: var(--field);
+    touch-action: none;
+  }
+
+  #canvas3d canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .model-cameras {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  #grid2d {
+    display: grid;
+    gap: 4px;
+    max-height: 340px;
+    overflow: auto;
+    margin-top: 12px;
+  }
+
+  .pin-cell {
+    min-width: 0;
+    padding: 8px 2px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .pin-cell small {
+    display: block;
+    color: var(--muted);
+  }
+
+  .scroll-table {
+    max-height: 300px;
+    overflow: auto;
+    margin-top: 16px;
+  }
+
+  .scroll-table th {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+  }
+
+  pre {
+    max-height: 300px;
+    overflow: auto;
+    padding: 15px;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    font: 12px/1.6 var(--mono);
+  }
+
+  #frameRange {
+    margin-top: 15px;
+  }
+
+  #modelStatus {
+    min-height: 24px;
+    color: var(--gold);
+  }
+
+  @media (max-width: 760px) {
+    .hero {
+      align-items: flex-start;
+    }
+
+    .hero svg {
+      width: 60px;
+      height: 60px;
+    }
+
+    h1 {
+      font-size: 23px;
+    }
+
+    .previews,
+    .model-layout {
+      grid-template-columns: 1fr;
+    }
+
+    #canvas3d {
+      height: 340px;
+    }
+
+    section {
+      padding: 17px;
+    }
+  }
+</style>
+</head>
+
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<main>
+  <header class="hero">
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <g fill="none" stroke="#d4ae5a" stroke-width="1.2">
+        <circle cx="50" cy="50" r="15"/>
+        <circle cx="63" cy="42.5" r="15"/>
+        <circle cx="63" cy="57.5" r="15"/>
+        <circle cx="50" cy="65" r="15"/>
+        <circle cx="37" cy="57.5" r="15"/>
+        <circle cx="37" cy="42.5" r="15"/>
+        <circle cx="50" cy="35" r="15"/>
+      </g>
+      <g fill="none" stroke="#4de8b4" stroke-width="1.6">
+        <path d="M50 50 C58 44 64 40 74 30 M66 38 C70 40 76 40 82 36"/>
+        <path d="M50 50 C44 58 38 66 30 76 M36 68 C32 66 26 66 20 70"/>
+      </g>
+    </svg>
+
+    <div>
+      <h1>Mycelium <span>Grid</span> Tool</h1>
+      <p class="sub">
+        Turn timelapse images into measured grid data and a moving
+        tactile pin model. Image processing runs locally in your browser.
+      </p>
+    </div>
+  </header>
+
+  <section>
+    <h2><em>01</em> Add your images</h2>
+
+    <div class="drop" id="drop">
+      Drag images here, or
+      <button id="pickFiles" type="button">Choose files</button>
+      <button id="pickFolder" type="button">Choose a folder</button>
+      <p class="note">
+        PNG or JPG recommended. Export TIFF images from Fiji as PNG.
+      </p>
+    </div>
+
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      multiple
+      hidden
+    >
+
+    <input
+      type="file"
+      id="folderInput"
+      webkitdirectory
+      multiple
+      hidden
+    >
+
+    <div id="listWrap" hidden style="margin-top:16px">
+      <table>
+        <thead>
+          <tr>
+            <th>Image — click to select</th>
+            <th>Time (h)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="list"></tbody>
+      </table>
+
+      <p class="note">
+        Filenames such as t019h provide the time automatically.
+        Otherwise the file order is used. You can edit each time.
+      </p>
+
+      <div id="imgPanel">
+        <h3 id="imgPanelTitle"></h3>
+        <p class="note">
+          Conditions for this image. Blank fields use the shared values.
+        </p>
+        <div id="imgFields"></div>
+      </div>
+
+      <div class="actions">
+        <button id="clearAll" type="button">Clear all images</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><em>02</em> Experiment details &amp; conditions</h2>
+
+    <p class="note">
+      Every field is optional. Shared values are written into each CSV row.
+    </p>
+
+    <div class="grp">Microscope</div>
+
+    <div class="fields">
+      <label class="fld">
+        <span>Microscope magnification</span>
+        <input id="mag" type="text" placeholder="e.g. 40×">
+      </label>
+    </div>
+
+    <div id="sharedFields"></div>
+  </section>
+
+  <section>
+    <h2><em>03</em> Grid &amp; colonization levels</h2>
+
+    <div class="fields">
+      <label class="fld">
+        <span>Grid columns</span>
+        <input id="cols" type="number" min="1" max="40" step="1">
+      </label>
+
+      <label class="fld">
+        <span>Grid rows</span>
+        <input id="rows" type="number" min="1" max="40" step="1">
+      </label>
+
+      <label class="fld">
+        <span>Hyphae are</span>
+        <select id="mode">
+          <option value="light">lighter than the background</option>
+          <option value="dark">darker than the background</option>
+        </select>
+      </label>
+
+      <label class="fld">
+        <span>Threshold (0–255)</span>
+        <div class="inline-row">
+          <input
+            id="threshRange"
+            type="range"
+            min="0"
+            max="255"
+            value="128"
+          >
+          <input
+            id="thresh"
+            type="number"
+            min="0"
+            max="255"
+            value="128"
+            style="width:85px"
+          >
+        </div>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="auto" type="button">Auto threshold</button>
+    </div>
+
+    <div class="grp">Colonization rate cut-offs</div>
+
+    <div class="fields">
+      <label class="fld">
+        <span>Rate 5 starts at (%)</span>
+        <input id="c1" type="number" min="0" max="100" step="0.5">
+      </label>
+
+      <label class="fld">
+        <span>Rate 10 starts at (%)</span>
+        <input id="c2" type="number" min="0" max="100" step="0.5">
+      </label>
+
+      <label class="fld">
+        <span>Rate 15 starts at (%)</span>
+        <input id="c3" type="number" min="0" max="100" step="0.5">
+      </label>
+
+      <label class="fld">
+        <span>Rate 20 starts at (%)</span>
+        <input id="c4" type="number" min="0" max="100" step="0.5">
+      </label>
+    </div>
+
+    <p class="note" id="levelNote"></p>
+
+    <div class="grp">Output pictures</div>
+
+    <div class="fields">
+      <label class="check">
+        <input id="showGrid" type="checkbox" checked>
+        Draw grid lines
+      </label>
+
+      <label class="check">
+        <input id="showOn" type="checkbox" checked>
+        Tint colonized cells
+      </label>
+
+      <label class="check">
+        <input id="showNums" type="checkbox" checked>
+        Write the rate in each cell
+      </label>
+    </div>
+
+    <p class="note">
+      Grid lines, tint and numbers are added after measurement.
+    </p>
+
+    <div class="grp">Preview</div>
+
+    <div class="previews">
+      <figure>
+        <figcaption>Original</figcaption>
+        <canvas class="pv" id="cvOrig" width="10" height="10"></canvas>
+      </figure>
+
+      <figure>
+        <figcaption>Black &amp; white + grid</figcaption>
+        <canvas class="pv" id="cvOut" width="10" height="10"></canvas>
+      </figure>
+    </div>
+
+    <p class="note" id="previewInfo">
+      Add an image to see a preview.
+    </p>
+  </section>
+
+  <section>
+    <h2><em>04</em> Make the files</h2>
+
+    <button class="primary" id="run" type="button" disabled>
+      Process all images
+    </button>
+
+    <div class="progress">
+      <div id="barFill"></div>
+    </div>
+
+    <p class="note" id="status" role="status"></p>
+
+    <div class="results" id="results"></div>
+
+    <div class="actions" id="dlActions" hidden>
+      <button class="primary" id="dlZip" type="button">
+        Download everything (ZIP)
+      </button>
+
+      <button id="dlCsv" type="button">
+        Download grid_points CSV only
+      </button>
+    </div>
+  </section>
+
+  <section id="modelPanel">
+    <h2><em>05</em> Tactile growth model</h2>
+
+    <p class="note">
+      Each image cell drives one pin. Target heights are 0%, 50% or 100%.
+      Movement between target positions is smooth.
+    </p>
+
+    <div class="fields">
+      <label class="fld">
+        <span>50% height starts at coverage (%)</span>
+        <input
+          id="heightMid"
+          type="number"
+          min="0"
+          max="100"
+          step="0.5"
+          value="25"
+        >
+      </label>
+
+      <label class="fld">
+        <span>100% height starts at coverage (%)</span>
+        <input
+          id="heightFull"
+          type="number"
+          min="0"
+          max="100"
+          step="0.5"
+          value="75"
+        >
+      </label>
+
+      <label class="fld">
+        <span>Travel at 100% (mm)</span>
+        <input
+          id="travelMm"
+          type="number"
+          min="1"
+          max="100"
+          value="20"
+        >
+      </label>
+
+      <label class="fld">
+        <span>Playback interval (seconds / image)</span>
+        <input
+          id="frameSeconds"
+          type="number"
+          min="1"
+          max="60"
+          value="4"
+        >
+      </label>
+    </div>
+
+    <p class="note" id="mappingNote"></p>
+
+    <div class="actions">
+      <button id="playFrames" disabled>Play image sequence</button>
+      <button id="resetPins">Reset pins</button>
+      <button id="restoreFrame" disabled>Restore image heights</button>
+    </div>
+
+    <div class="fields" style="margin-top:15px">
+      <label class="fld">
+        <span>Processed image</span>
+        <select id="frameSelect" disabled>
+          <option>Process images to load the sequence</option>
+        </select>
+      </label>
+    </div>
+
+    <input
+      id="frameRange"
+      type="range"
+      min="0"
+      max="0"
+      value="0"
+      aria-label="Processed image frame"
+      disabled
+    >
+
+    <p id="modelStatus" role="status">
+      Add images to preview the model.
+    </p>
+
+    <div class="model-layout">
+      <div>
+        <div id="canvas3d" aria-label="3D tactile pin model"></div>
+
+        <div class="model-cameras">
+          <button id="camIso">Iso view</button>
+          <button id="camTop">Top view</button>
+          <button id="camSide">Side view</button>
+        </div>
+
+        <p class="note">
+          Drag to rotate · scroll to zoom.
+          Row 1 corresponds to the top of the source image.
+        </p>
+      </div>
+
+      <div>
+        <div class="grp">Pin targets</div>
+        <div id="grid2d"></div>
+        <p class="note" id="pinSummary"></p>
+
+        <p class="note">
+          Click a cell to cycle its target through 0%, 50% and 100%.
+        </p>
+
+        <div class="grp">Demo presets</div>
+
+        <div class="actions">
+          <button data-demo="0">T0 / Sparse</button>
+          <button data-demo="1">T1 / Spreading</button>
+          <button data-demo="2">T2 / Dense</button>
+        </div>
+
+        <p class="note">
+          Presets are illustrative. Restore image heights to use measurements.
+        </p>
+      </div>
+    </div>
+
+    <div class="grp">Servo mapping</div>
+
+    <div class="fields">
+      <label class="fld">
+        <span>PWM count at 0°</span>
+        <input
+          id="inputMinPulse"
+          type="number"
+          min="1"
+          max="4095"
+          value="150"
+        >
+      </label>
+
+      <label class="fld">
+        <span>PWM count at 180°</span>
+        <input
+          id="inputMaxPulse"
+          type="number"
+          min="1"
+          max="4095"
+          value="600"
+        >
+      </label>
+
+      <label class="fld">
+        <span>Servo angle at 0% height</span>
+        <input
+          id="inputMinAngle"
+          type="number"
+          min="0"
+          max="180"
+          value="30"
+        >
+      </label>
+
+      <label class="fld">
+        <span>Servo angle at 100% height</span>
+        <input
+          id="inputMaxAngle"
+          type="number"
+          min="0"
+          max="180"
+          value="150"
+        >
+      </label>
+    </div>
+
+    <p class="note">
+      Angle and PWM values use a linear calibration estimate at 50 Hz.
+      Calibrate your mechanism before hardware use.
+      Playback controls the on-screen model.
+    </p>
+
+    <div class="scroll-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Pin / cell</th>
+            <th>Coverage</th>
+            <th>Target</th>
+            <th>Travel</th>
+            <th>Board / channel</th>
+            <th>Angle</th>
+            <th>PWM count</th>
+          </tr>
+        </thead>
+        <tbody id="telemetryTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="actions">
+      <button id="downloadHeights" disabled>Download height CSV</button>
+      <button id="downloadSequence" disabled>Download sequence JSON</button>
+      <button id="copyMatrix">Copy Arduino matrix</button>
+    </div>
+
+    <pre id="cppOutput"></pre>
+  </section>
+</main>
+
+<datalist id="dl_sunPos">
+  <option value="Morning (east)">
+  <option value="Midday (overhead)">
+  <option value="Afternoon (west)">
+  <option value="Evening (low west)">
+  <option value="No direct sun">
+</datalist>
+
+<datalist id="dl_nutrients">
+  <option value="Standard">
+  <option value="Enriched">
+  <option value="Low">
+  <option value="Depleted">
+</datalist>
+
+<datalist id="dl_substrate">
+  <option value="Agar">
+  <option value="Malt extract agar">
+  <option value="Potato dextrose agar">
+  <option value="Grain">
+  <option value="Sawdust">
+</datalist>
+
+<datalist id="dl_water">
+  <option value="Dry">
+  <option value="Moist">
+  <option value="Saturated">
+  <option value="Misted daily">
+</datalist>
+
+<datalist id="dl_oxygen">
+  <option value="Sealed dish">
+  <option value="Vented lid">
+  <option value="Open air">
+  <option value="Fresh air exchange">
+</datalist>
+
+<datalist id="dl_surfaceStructure">
+  <option value="Flat">
+  <option value="Ridged">
+  <option value="Porous">
+  <option value="Textured">
+</datalist>
+
+<datalist id="dl_surfaceOrientation">
+  <option value="Horizontal">
+  <option value="Vertical">
+  <option value="Tilted">
+  <option value="Inverted">
+</datalist>
+
+<datalist id="dl_stress">
+  <option value="None">
+  <option value="Mild">
+  <option value="Incremental: step 1">
+  <option value="Incremental: step 2">
+  <option value="Cold shock">
+</datalist>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+"use strict";
+
+/* -------------------------------------------------------
+   Default settings
+------------------------------------------------------- */
+
+const CONFIG = {
+  gridCols: 4,
+  gridRows: 4,
+  cuts: [5, 25, 50, 75],
+  tempSteps: [10, 15, 20, 25, 30, 35, 40],
+
+  tempToLumen: {
+    coldT: 10,
+    lumenMax: 1000,
+    hotT: 40,
+    lumenMin: 100
+  },
+
+  ledColors: {
+    cool: [0, 90, 255],
+    neutral: [255, 255, 255],
+    warm: [255, 60, 0]
+  },
+
+  lightLevels: {
+    "Direct sun": 100,
+    "Partial sun": 75,
+    "Overcast": 50,
+    "Shade": 25,
+    "Dark": 0
+  }
+};
+
+const FIELDS = [
+  {
+    group: "Temperature & light",
+    key: "temp",
+    label: "Temperature",
+    type: "select",
+    hint: "Sets the LED colour in the CSV."
+  },
+  {
+    group: "Temperature & light",
+    key: "light",
+    label: "Light / Sunlight",
+    type: "select",
+    hint: "Sets the LED brightness in the CSV."
+  },
+  {
+    group: "Temperature & light",
+    key: "sunPos",
+    label: "Sun position",
+    type: "text",
+    ph: "e.g. Morning (east)"
+  },
+  {
+    group: "Food, medium & water",
+    key: "nutrients",
+    label: "Nutrients",
+    type: "text",
+    ph: "e.g. Standard"
+  },
+  {
+    group: "Food, medium & water",
+    key: "substrate",
+    label: "Substrate",
+    type: "text",
+    ph: "e.g. Malt extract agar"
+  },
+  {
+    group: "Food, medium & water",
+    key: "water",
+    label: "Water",
+    type: "text",
+    ph: "e.g. Moist"
+  },
+  {
+    group: "Air & surface",
+    key: "oxygen",
+    label: "Oxygen",
+    type: "text",
+    ph: "e.g. Vented lid"
+  },
+  {
+    group: "Air & surface",
+    key: "surfaceStructure",
+    label: "Surface: structure",
+    type: "text",
+    ph: "e.g. Flat"
+  },
+  {
+    group: "Air & surface",
+    key: "surfaceOrientation",
+    label: "Surface: orientation",
+    type: "text",
+    ph: "e.g. Horizontal"
+  },
+  {
+    group: "Stress",
+    key: "stress",
+    label: "Stress",
+    type: "text",
+    ph: "e.g. Incremental: step 1"
+  }
+];
+
+const GROUPS = [...new Set(FIELDS.map(field => field.group))];
+const PREFIX = "GRID_B&W_Output_";
+const LEVELS = [0, 5, 10, 15, 20];
+
+const $ = id => document.getElementById(id);
+
+let items = [];
+let selected = 0;
+let previewCache = null;
+let previewTimer = null;
+let lastResult = null;
+let processing = false;
+let inputRevision = 0;
+
+/* -------------------------------------------------------
+   Model state
+------------------------------------------------------- */
+
+let processedFrames = [];
+let activeFrame = 0;
+let previewFrame = null;
+
+let modelCols = CONFIG.gridCols;
+let modelRows = CONFIG.gridRows;
+
+let targetHeights = [];
+let displayHeights = [];
+let activeCoverage = [];
+
+let playbackTimer = null;
+
+let scene = null;
+let camera = null;
+let renderer = null;
+let pinGroup = null;
+let pinMeshes = [];
+let rods = [];
+let viewDistance = 300;
+
+let fallbackCanvas = null;
+let fallbackView = "iso";
+let fallbackRotation = 0;
+let fallbackScale = 1;
+
+let lastAnimationTime = performance.now();
+
+/* -------------------------------------------------------
+   General helpers
+------------------------------------------------------- */
+
+function natural(a, b) {
+  return a.localeCompare(b, undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function baseName(name) {
+  return name.replace(/\.[^.]+$/, "");
+}
+
+function parseTime(name) {
+  const match = name.match(/t(\d+(?:\.\d+)?)h/i);
+  return match ? Number(match[1]) : null;
+}
+
+function effTime(item) {
+  return item.time !== null ? item.time : items.indexOf(item);
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+
+  if (/[",\n\r]/.test(text)) {
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+
+  return text;
+}
+
+function csvRow(values) {
+  return values.map(csvCell).join(",");
+}
+
+function clampInt(value, minimum, maximum, fallback) {
+  const number = Math.round(Number(value));
+
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+function download(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = name;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function modelMessage(message) {
+  $("modelStatus").textContent = message;
+}
+
+/* -------------------------------------------------------
+   Environmental calculations
+------------------------------------------------------- */
+
+function lumenFromC(temperature) {
+  const config = CONFIG.tempToLumen;
+
+  const fraction = Math.min(
+    1,
+    Math.max(
+      0,
+      (temperature - config.coldT) /
+      (config.hotT - config.coldT)
+    )
+  );
+
+  return Math.round(
+    config.lumenMax -
+    fraction * (config.lumenMax - config.lumenMin)
+  );
+}
+
+function ledFromLumen(lumen) {
+  const config = CONFIG.tempToLumen;
+  const colors = CONFIG.ledColors;
+
+  const fraction = Math.min(
+    1,
+    Math.max(
+      0,
+      (lumen - config.lumenMin) /
+      (config.lumenMax - config.lumenMin)
+    )
+  );
+
+  const warmth = 1 - fraction;
+
+  function mix(a, b, amount) {
+    return a.map((value, index) => {
+      return Math.round(value + (b[index] - value) * amount);
+    });
+  }
+
+  const rgb = warmth <= 0.5
+    ? mix(colors.cool, colors.neutral, warmth / 0.5)
+    : mix(colors.neutral, colors.warm, (warmth - 0.5) / 0.5);
+
+  const [r, g, b] = rgb;
+
+  const hex = "#" + rgb.map(value => {
+    return value.toString(16).padStart(2, "0");
+  }).join("").toUpperCase();
+
+  return { r, g, b, hex };
+}
+
+function lightLevel(name) {
+  return Object.prototype.hasOwnProperty.call(
+    CONFIG.lightLevels,
+    name
+  ) ? CONFIG.lightLevels[name] : "";
+}
+
+/* -------------------------------------------------------
+   Experiment fields
+------------------------------------------------------- */
+
+function makeField(field, prefix, shared) {
+  const wrapper = document.createElement("label");
+  wrapper.className = "fld";
+
+  const label = document.createElement("span");
+  label.textContent = field.label;
+
+  wrapper.appendChild(label);
+
+  let input;
+
+  if (field.type === "select") {
+    input = document.createElement("select");
+
+    input.add(new Option(
+      shared ? "(not set)" : "(same as shared)",
+      ""
+    ));
+
+    if (field.key === "temp") {
+      CONFIG.tempSteps.forEach(temperature => {
+        input.add(new Option(
+          temperature + " °C",
+          String(temperature)
+        ));
+      });
+    } else {
+      Object.keys(CONFIG.lightLevels).forEach(name => {
+        input.add(new Option(name, name));
+      });
+    }
+  } else {
+    input = document.createElement("input");
+    input.type = "text";
+    input.setAttribute("list", "dl_" + field.key);
+    input.placeholder = shared
+      ? (field.ph || "")
+      : "same as shared";
+  }
+
+  input.id = prefix + field.key;
+  wrapper.appendChild(input);
+
+  if (field.hint) {
+    const hint = document.createElement("small");
+    hint.textContent = field.hint;
+    wrapper.appendChild(hint);
+  }
+
+  return wrapper;
+}
+
+function buildFieldBlock(container, prefix, shared) {
+  container.replaceChildren();
+
+  GROUPS.forEach(group => {
+    const heading = document.createElement("div");
+    heading.className = "grp";
+    heading.textContent = group;
+
+    const grid = document.createElement("div");
+    grid.className = "fields";
+
+    FIELDS
+      .filter(field => field.group === group)
+      .forEach(field => {
+        grid.appendChild(makeField(field, prefix, shared));
+      });
+
+    container.append(heading, grid);
+  });
+}
+
+function sharedValues() {
+  const values = {
+    mag: $("mag").value.trim()
+  };
+
+  FIELDS.forEach(field => {
+    values[field.key] = $("sh_" + field.key).value.trim();
+  });
+
+  return values;
+}
+
+function buildImagePanel() {
+  const item = items[selected];
+
+  if (!item) {
+    return;
+  }
+
+  $("imgPanelTitle").textContent = item.file.name;
+  buildFieldBlock($("imgFields"), "im_", false);
+
+  FIELDS.forEach(field => {
+    const input = $("im_" + field.key);
+    input.value = item.env[field.key] || "";
+
+    input.oninput = input.onchange = () => {
+      item.env[field.key] = input.value;
+    };
+  });
+}
+
+/* -------------------------------------------------------
+   Image analysis
+------------------------------------------------------- */
+
+function params() {
+  return {
+    cols: clampInt($("cols").value, 1, 40, CONFIG.gridCols),
+    rows: clampInt($("rows").value, 1, 40, CONFIG.gridRows),
+    dark: $("mode").value === "dark",
+    thresh: clampInt($("thresh").value, 0, 255, 128),
+
+    cuts: [
+      Number($("c1").value) / 100,
+      Number($("c2").value) / 100,
+      Number($("c3").value) / 100,
+      Number($("c4").value) / 100
+    ],
+
+    grid: $("showGrid").checked,
+    tint: $("showOn").checked,
+    nums: $("showNums").checked
+  };
+}
+
+function validateAnalysis(parameters) {
+  const cuts = parameters.cuts;
+
+  const valid = cuts.every((value, index) => {
+    return Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 1 &&
+      (index === 0 || value >= cuts[index - 1]);
+  });
+
+  if (!valid) {
+    throw new Error(
+      "Colonization cut-offs must increase from left to right within 0–100%."
+    );
+  }
+}
+
+function levelOf(fraction, cuts) {
+  if (fraction > 0 && fraction >= cuts[3]) return 20;
+  if (fraction > 0 && fraction >= cuts[2]) return 15;
+  if (fraction > 0 && fraction >= cuts[1]) return 10;
+  if (fraction > 0 && fraction >= cuts[0]) return 5;
+
+  return 0;
+}
+
+function updateLevelNote() {
+  const parameters = params();
+  const cuts = parameters.cuts.map(value => {
+    return Number((value * 100).toFixed(1));
+  });
+
+  try {
+    validateAnalysis(parameters);
+
+    $("levelNote").className = "note";
+    $("levelNote").textContent =
+      `Rate 0 < ${cuts[0]}% · ` +
+      `Rate 5 ≥ ${cuts[0]}% · ` +
+      `Rate 10 ≥ ${cuts[1]}% · ` +
+      `Rate 15 ≥ ${cuts[2]}% · ` +
+      `Rate 20 ≥ ${cuts[3]}%`;
+  } catch (error) {
+    $("levelNote").className = "note warn";
+    $("levelNote").textContent = error.message;
+  }
+}
+
+async function loadData(file) {
+  const bitmap = await createImageBitmap(file);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+
+  const context = canvas.getContext("2d", {
+    willReadFrequently: true
+  });
+
+  context.drawImage(bitmap, 0, 0);
+
+  if (bitmap.close) {
+    bitmap.close();
+  }
+
+  return context.getImageData(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+}
+
+function analyze(image, parameters) {
+  const width = image.width;
+  const height = image.height;
+  const source = image.data;
+
+  const cols = parameters.cols;
+  const rows = parameters.rows;
+
+  const output = new ImageData(width, height);
+  const mask = new Uint8Array(width * height);
+
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    const offset = pixel * 4;
+
+    const luminance =
+      0.299 * source[offset] +
+      0.587 * source[offset + 1] +
+      0.114 * source[offset + 2];
+
+    const hypha = parameters.dark
+      ? luminance < parameters.thresh
+      : luminance > parameters.thresh;
+
+    const value = hypha ? 255 : 0;
+
+    output.data[offset] = value;
+    output.data[offset + 1] = value;
+    output.data[offset + 2] = value;
+    output.data[offset + 3] = 255;
+
+    mask[pixel] = hypha ? 1 : 0;
+  }
+
+  const xs = [];
+  const ys = [];
+
+  for (let column = 0; column <= cols; column++) {
+    xs.push(Math.round(column * width / cols));
+  }
+
+  for (let row = 0; row <= rows; row++) {
+    ys.push(Math.round(row * height / rows));
+  }
+
+  const frac = new Float32Array(cols * rows);
+  const level = new Uint8Array(cols * rows);
+
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < cols; column++) {
+      let whitePixels = 0;
+
+      for (let y = ys[row]; y < ys[row + 1]; y++) {
+        for (let x = xs[column]; x < xs[column + 1]; x++) {
+          whitePixels += mask[y * width + x];
+        }
+      }
+
+      const area =
+        (xs[column + 1] - xs[column]) *
+        (ys[row + 1] - ys[row]);
+
+      const fraction = area ? whitePixels / area : 0;
+      const index = row * cols + column;
+
+      frac[index] = fraction;
+      level[index] = levelOf(fraction, parameters.cuts);
+    }
+  }
+
+  return {
+    bw: output,
+    w: width,
+    h: height,
+    nx: cols,
+    ny: rows,
+    xs,
+    ys,
+    frac,
+    level
+  };
+}
+
+function render(result, parameters, canvas) {
+  canvas.width = result.w;
+  canvas.height = result.h;
+
+  const context = canvas.getContext("2d");
+  context.putImageData(result.bw, 0, 0);
+
+  if (parameters.tint) {
+    for (let row = 0; row < result.ny; row++) {
+      for (let column = 0; column < result.nx; column++) {
+        const rate = result.level[row * result.nx + column];
+
+        if (!rate) continue;
+
+        context.fillStyle =
+          `rgba(255,60,60,${rate / 20 * 0.5})`;
+
+        context.fillRect(
+          result.xs[column],
+          result.ys[row],
+          result.xs[column + 1] - result.xs[column],
+          result.ys[row + 1] - result.ys[row]
+        );
+      }
+    }
+  }
+
+  if (parameters.grid) {
+    context.strokeStyle = "rgba(0,220,255,.7)";
+    context.lineWidth = Math.max(
+      1,
+      Math.round(Math.min(result.w, result.h) / 600)
+    );
+
+    context.beginPath();
+
+    for (let column = 1; column < result.nx; column++) {
+      context.moveTo(result.xs[column] + 0.5, 0);
+      context.lineTo(result.xs[column] + 0.5, result.h);
+    }
+
+    for (let row = 1; row < result.ny; row++) {
+      context.moveTo(0, result.ys[row] + 0.5);
+      context.lineTo(result.w, result.ys[row] + 0.5);
+    }
+
+    context.stroke();
+  }
+
+  const cellSize = Math.min(
+    result.w / result.nx,
+    result.h / result.ny
+  );
+
+  if (parameters.nums && cellSize >= 28) {
+    const fontSize = Math.max(10, Math.round(cellSize * 0.24));
+
+    context.font = `bold ${fontSize}px Arial, sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.lineJoin = "round";
+    context.lineWidth = Math.max(2, fontSize / 5);
+
+    for (let row = 0; row < result.ny; row++) {
+      for (let column = 0; column < result.nx; column++) {
+        const x =
+          (result.xs[column] + result.xs[column + 1]) / 2;
+
+        const y =
+          (result.ys[row] + result.ys[row + 1]) / 2;
+
+        const text = String(
+          result.level[row * result.nx + column]
+        );
+
+        context.strokeStyle = "#000";
+        context.strokeText(text, x, y);
+
+        context.fillStyle = "#fff";
+        context.fillText(text, x, y);
+      }
+    }
+  }
+}
+
+function otsu(image) {
+  const histogram = new Array(256).fill(0);
+  const pixels = image.width * image.height;
+
+  for (let pixel = 0; pixel < pixels; pixel++) {
+    const offset = pixel * 4;
+
+    const gray = Math.round(
+      0.299 * image.data[offset] +
+      0.587 * image.data[offset + 1] +
+      0.114 * image.data[offset + 2]
+    );
+
+    histogram[gray]++;
+  }
+
+  let sum = 0;
+
+  for (let threshold = 0; threshold < 256; threshold++) {
+    sum += threshold * histogram[threshold];
+  }
+
+  let backgroundSum = 0;
+  let backgroundWeight = 0;
+  let bestVariance = 0;
+  let bestThreshold = 128;
+
+  for (let threshold = 0; threshold < 256; threshold++) {
+    backgroundWeight += histogram[threshold];
+
+    if (!backgroundWeight) continue;
+
+    const foregroundWeight = pixels - backgroundWeight;
+
+    if (!foregroundWeight) break;
+
+    backgroundSum += threshold * histogram[threshold];
+
+    const backgroundMean = backgroundSum / backgroundWeight;
+    const foregroundMean =
+      (sum - backgroundSum) / foregroundWeight;
+
+    const variance =
+      backgroundWeight *
+      foregroundWeight *
+      (backgroundMean - foregroundMean) ** 2;
+
+    if (variance > bestVariance) {
+      bestVariance = variance;
+      bestThreshold = threshold;
+    }
+  }
+
+  return bestThreshold;
+}
+
+/* -------------------------------------------------------
+   Image list and live preview
+------------------------------------------------------- */
+
+function renderList() {
+  const table = $("list");
+  table.replaceChildren();
+
+  items.forEach((item, index) => {
+    const row = document.createElement("tr");
+
+    if (index === selected) {
+      row.className = "sel";
+    }
+
+    const nameCell = document.createElement("td");
+    nameCell.className = "name";
+    nameCell.textContent = item.file.name;
+
+    nameCell.onclick = () => {
+      selected = index;
+      renderList();
+      buildImagePanel();
+      updatePreview();
+    };
+
+    const timeCell = document.createElement("td");
+    const timeInput = document.createElement("input");
+
+    timeInput.type = "number";
+    timeInput.step = "any";
+    timeInput.value = item.time !== null ? item.time : "";
+    timeInput.placeholder = String(index);
+
+    timeInput.oninput = () => {
+      const value = parseFloat(timeInput.value);
+      item.time = Number.isFinite(value) ? value : null;
+    };
+
+    timeCell.appendChild(timeInput);
+
+    const removeCell = document.createElement("td");
+    const remove = document.createElement("button");
+
+    remove.type = "button";
+    remove.textContent = "Remove";
+
+    remove.onclick = () => {
+      if (processing) return;
+
+      items.splice(index, 1);
+      selected = Math.max(
+        0,
+        Math.min(selected, items.length - 1)
+      );
+
+      previewCache = null;
+      markAnalysisChanged("Image removed. Process the sequence again.");
+
+      renderList();
+      buildImagePanel();
+      updatePreview();
+    };
+
+    removeCell.appendChild(remove);
+    row.append(nameCell, timeCell, removeCell);
+    table.appendChild(row);
+  });
+
+  $("listWrap").hidden = items.length === 0;
+  $("run").disabled = items.length === 0 || processing;
+}
+
+function addFiles(fileList) {
+  if (processing) return;
+
+  const files = [...fileList].filter(file => {
+    return file.type.startsWith("image/");
+  });
+
+  const skipped = fileList.length - files.length;
+
+  files.forEach(file => {
+    items.push({
+      file,
+      base: baseName(file.name),
+      time: parseTime(file.name),
+      env: {}
+    });
+  });
+
+  items.sort((a, b) => natural(a.file.name, b.file.name));
+
+  selected = Math.max(0, Math.min(selected, items.length - 1));
+
+  markAnalysisChanged(
+    "Images changed. Process all images to build the sequence."
+  );
+
+  renderList();
+  buildImagePanel();
+  updatePreview();
+
+  $("status").textContent = skipped
+    ? `${skipped} non-image file(s) skipped.`
+    : "";
+}
+
+function updatePreview() {
+  updateLevelNote();
+  clearTimeout(previewTimer);
+
+  previewTimer = setTimeout(async () => {
+    if (!items.length) {
+      $("previewInfo").textContent = "Add an image to see a preview.";
+
+      for (const id of ["cvOrig", "cvOut"]) {
+        const canvas = $(id);
+        canvas.width = 10;
+        canvas.height = 10;
+      }
+
+      return;
+    }
+
+    const item = items[selected];
+
+    try {
+      let image;
+
+      if (previewCache && previewCache.file === item.file) {
+        image = previewCache.data;
+      } else {
+        image = await loadData(item.file);
+      }
+
+      if (items[selected] !== item) return;
+
+      previewCache = {
+        file: item.file,
+        data: image
+      };
+
+      const parameters = params();
+      validateAnalysis(parameters);
+
+      const original = $("cvOrig");
+      original.width = image.width;
+      original.height = image.height;
+
+      original.getContext("2d").putImageData(image, 0, 0);
+
+      const result = analyze(image, parameters);
+      render(result, parameters, $("cvOut"));
+
+      previewModel(result, item);
+
+      const counts = LEVELS.map(level => {
+        return result.level.filter(value => value === level).length;
+      });
+
+      $("previewInfo").textContent =
+        `${item.file.name} · ${image.width} × ${image.height} px · ` +
+        `${parameters.cols} × ${parameters.rows} grid · ` +
+        `Cells at rate 0 / 5 / 10 / 15 / 20: ${counts.join(" / ")}`;
+    } catch (error) {
+      $("previewInfo").textContent = error.message;
+    }
+  }, 120);
+}
+
+/* -------------------------------------------------------
+   ZIP writer — stored files, no extra library required
+------------------------------------------------------- */
+
+const crcTable = (() => {
+  const table = new Uint32Array(256);
+
+  for (let value = 0; value < 256; value++) {
+    let crc = value;
+
+    for (let bit = 0; bit < 8; bit++) {
+      crc = crc & 1
+        ? 0xEDB88320 ^ (crc >>> 1)
+        : crc >>> 1;
+    }
+
+    table[value] = crc >>> 0;
+  }
+
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xFFFFFFFF;
+
+  for (let index = 0; index < bytes.length; index++) {
+    crc = crcTable[(crc ^ bytes[index]) & 255] ^ (crc >>> 8);
+  }
+
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function makeZip(files) {
+  const encoder = new TextEncoder();
+  const parts = [];
+  const central = [];
+
+  let offset = 0;
+
+  const now = new Date();
+
+  const time =
+    (now.getHours() << 11) |
+    (now.getMinutes() << 5) |
+    (now.getSeconds() >> 1);
+
+  const date =
+    ((now.getFullYear() - 1980) << 9) |
+    ((now.getMonth() + 1) << 5) |
+    now.getDate();
+
+  for (const file of files) {
+    const name = encoder.encode(file.name);
+    const crc = crc32(file.data);
+    const size = file.data.length;
+
+    const local = new DataView(new ArrayBuffer(30));
+
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(8, 0, true);
+    local.setUint16(10, time, true);
+    local.setUint16(12, date, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, size, true);
+    local.setUint32(22, size, true);
+    local.setUint16(26, name.length, true);
+    local.setUint16(28, 0, true);
+
+    parts.push(local.buffer, name, file.data);
+
+    const entry = new DataView(new ArrayBuffer(46));
+
+    entry.setUint32(0, 0x02014b50, true);
+    entry.setUint16(4, 20, true);
+    entry.setUint16(6, 20, true);
+    entry.setUint16(8, 0x0800, true);
+    entry.setUint16(10, 0, true);
+    entry.setUint16(12, time, true);
+    entry.setUint16(14, date, true);
+    entry.setUint32(16, crc, true);
+    entry.setUint32(20, size, true);
+    entry.setUint32(24, size, true);
+    entry.setUint16(28, name.length, true);
+    entry.setUint32(42, offset, true);
+
+    central.push(entry.buffer, name);
+    offset += 30 + name.length + size;
+  }
+
+  const centralSize = central.reduce((sum, part) => {
+    return sum + part.byteLength;
+  }, 0);
+
+  const end = new DataView(new ArrayBuffer(22));
+
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, files.length, true);
+  end.setUint16(10, files.length, true);
+  end.setUint32(12, centralSize, true);
+  end.setUint32(16, offset, true);
+
+  return new Blob(
+    [...parts, ...central, end.buffer],
+    { type: "application/zip" }
+  );
+}
+
+/* -------------------------------------------------------
+   Process all images and create original exports
+------------------------------------------------------- */
+
+async function run() {
+  if (processing || !items.length) return;
+
+  const parameters = params();
+
+  validateAnalysis(parameters);
+  heightThresholds();
+
+  invalidateModel("Processing images…");
+
+  processing = true;
+  $("run").disabled = true;
+
+  const revision = inputRevision;
+  const shared = sharedValues();
+
+  const order = items.slice().sort((a, b) => {
+    return effTime(a) - effTime(b) ||
+      natural(a.file.name, b.file.name);
+  });
+
+  const files = [];
+  const results = [];
+  const usedNames = new Set();
+  const sizes = new Set();
+  const encoder = new TextEncoder();
+
+  try {
+    for (let index = 0; index < order.length; index++) {
+      const item = order[index];
+
+      $("status").className = "note";
+      $("status").textContent =
+        `Processing ${index + 1}/${order.length} · ${item.file.name}`;
+
+      $("barFill").style.width =
+        `${index / order.length * 100}%`;
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const image = await loadData(item.file);
+
+      if (revision !== inputRevision) {
+        throw new Error(
+          "Settings changed during processing. Process the images again."
+        );
+      }
+
+      const result = analyze(image, parameters);
+      const canvas = document.createElement("canvas");
+
+      render(result, parameters, canvas);
+
+      const blob = await new Promise(resolve => {
+        canvas.toBlob(resolve, "image/png");
+      });
+
+      if (!blob) {
+        throw new Error("Could not create the output PNG.");
+      }
+
+      let name = PREFIX + item.base + ".png";
+      let suffix = 2;
+
+      while (usedNames.has(name)) {
+        name = PREFIX + item.base + "_" + suffix++ + ".png";
+      }
+
+      usedNames.add(name);
+
+      files.push({
+        name,
+        data: new Uint8Array(await blob.arrayBuffer())
+      });
+
+      sizes.add(`${image.width}×${image.height}`);
+
+      const env = {};
+
+      FIELDS.forEach(field => {
+        env[field.key] =
+          (item.env[field.key] || "").trim() ||
+          shared[field.key];
+      });
+
+      const temperature = parseFloat(env.temp);
+
+      env.lumen = env.temp !== "" && Number.isFinite(temperature)
+        ? lumenFromC(temperature)
+        : "";
+
+      env.led = env.lumen !== ""
+        ? ledFromLumen(env.lumen)
+        : { hex: "", r: "", g: "", b: "" };
+
+      env.lightLevel = lightLevel(env.light);
+
+      env.brightness = env.lightLevel !== ""
+        ? Math.round(env.lightLevel * 2.55)
+        : "";
+
+      results.push({
+        it: item,
+        num: index + 1,
+        t: effTime(item),
+        res: result,
+        name,
+        blob,
+        env
+      });
+    }
+
+    const header = [
+      "Image Name",
+      "Image Number",
+      "Colonization Rate",
+      "Column",
+      "Row",
+      "X (px)",
+      "Y (px)",
+      "Time (h)",
+      "Magnification",
+      "Temperature (°C)",
+      "Lumen Value",
+      "LED Color (hex)",
+      "LED Red (0-255)",
+      "LED Green (0-255)",
+      "LED Blue (0-255)",
+      "Light Condition",
+      "Light Level (0-100)",
+      "LED Brightness (0-255)",
+      "Sun Position",
+      "Nutrients",
+      "Substrate",
+      "Water",
+      "Oxygen",
+      "Surface Structure",
+      "Surface Orientation",
+      "Stress",
+      "Raw White Fraction (%)"
+    ];
+
+    const csvRows = [csvRow(header)];
+
+    for (const frame of results) {
+      for (let row = 0; row < parameters.rows; row++) {
+        for (let column = 0; column < parameters.cols; column++) {
+          const index = row * parameters.cols + column;
+          const env = frame.env;
+
+          const x =
+            (frame.res.xs[column] + frame.res.xs[column + 1]) / 2;
+
+          const y =
+            (frame.res.ys[row] + frame.res.ys[row + 1]) / 2;
+
+          csvRows.push(csvRow([
+            frame.it.file.name,
+            frame.num,
+            frame.res.level[index],
+            column + 1,
+            row + 1,
+            x,
+            y,
+            frame.t,
+            shared.mag,
+            env.temp,
+            env.lumen,
+            env.led.hex,
+            env.led.r,
+            env.led.g,
+            env.led.b,
+            env.light,
+            env.lightLevel,
+            env.brightness,
+            env.sunPos,
+            env.nutrients,
+            env.substrate,
+            env.water,
+            env.oxygen,
+            env.surfaceStructure,
+            env.surfaceOrientation,
+            env.stress,
+            (frame.res.frac[index] * 100).toFixed(1)
+          ]));
+        }
+      }
+    }
+
+    const gridCSV = csvRows.join("\n");
+    const firstColonized = new Map();
+
+    for (const frame of results) {
+      for (let row = 0; row < parameters.rows; row++) {
+        for (let column = 0; column < parameters.cols; column++) {
+          const index = row * parameters.cols + column;
+          const rate = frame.res.level[index];
+
+          if (!rate) continue;
+
+          const key = column + "," + row;
+          let first = firstColonized.get(key);
+
+          if (!first) {
+            first = {
+              x: (
+                frame.res.xs[column] +
+                frame.res.xs[column + 1]
+              ) / 2,
+
+              y: (
+                frame.res.ys[row] +
+                frame.res.ys[row + 1]
+              ) / 2,
+
+              num: frame.num,
+              time: frame.t,
+              max: rate
+            };
+
+            firstColonized.set(key, first);
+          }
+
+          first.max = Math.max(first.max, rate);
+        }
+      }
+    }
+
+    const firstRows = [csvRow([
+      "Column",
+      "Row",
+      "X (px)",
+      "Y (px)",
+      "First Colonized In Image Number",
+      "First Colonized Time (h)",
+      "Highest Rate Reached",
+      "Rate In Last Image"
+    ])];
+
+    const lastFrame = results[results.length - 1];
+
+    for (let row = 0; row < parameters.rows; row++) {
+      for (let column = 0; column < parameters.cols; column++) {
+        const first = firstColonized.get(column + "," + row);
+
+        if (!first) continue;
+
+        firstRows.push(csvRow([
+          column + 1,
+          row + 1,
+          first.x,
+          first.y,
+          first.num,
+          first.time,
+          first.max,
+          lastFrame.res.level[row * parameters.cols + column]
+        ]));
+      }
+    }
+
+    const warning = sizes.size > 1
+      ? "Images have different sizes. Use matching crops and alignment."
+      : "";
+
+    const settings = [
+      "Mycelium Grid Tool settings",
+      "",
+      `Grid: ${parameters.cols} columns × ${parameters.rows} rows`,
+      `Threshold: ${parameters.thresh}`,
+      `Hyphae: ${parameters.dark ? "dark" : "light"}`,
+      `Rate cut-offs (%): ${parameters.cuts.map(v => v * 100).join(", ")}`,
+      `Images processed: ${results.length}`,
+      `Magnification: ${shared.mag || "(not entered)"}`,
+      "",
+      ...FIELDS.map(field => {
+        return field.label + ": " + (shared[field.key] || "(not entered)");
+      }),
+      "",
+      "Each image may override shared conditions.",
+      "Column 1 is the left edge. Row 1 is the top edge.",
+      "Coordinates are cell centres in pixels.",
+      "Images are ordered by their recorded time.",
+      warning
+    ].join("\n");
+
+    files.push({
+      name: PREFIX + "grid_points.csv",
+      data: encoder.encode(gridCSV)
+    });
+
+    files.push({
+      name: PREFIX + "cells_first_colonized.csv",
+      data: encoder.encode(firstRows.join("\n"))
+    });
+
+    files.push({
+      name: PREFIX + "settings.txt",
+      data: encoder.encode(settings)
+    });
+
+    if (revision !== inputRevision) {
+      throw new Error(
+        "Settings changed during processing. Process the images again."
+      );
+    }
+
+    acceptProcessedResults(results);
+
+    lastResult = {
+      baseFiles: files,
+      csvBlob: new Blob([gridCSV], { type: "text/csv" })
+    };
+
+    $("results").replaceChildren();
+
+    results.forEach(frame => {
+      const link = document.createElement("a");
+      link.href = "#";
+      link.textContent = frame.name;
+
+      link.onclick = event => {
+        event.preventDefault();
+        download(frame.blob, frame.name);
+      };
+
+      $("results").appendChild(link);
+    });
+
+    $("barFill").style.width = "100%";
+    $("status").className = warning ? "note warn" : "note";
+
+    $("status").textContent =
+      `Done. ${results.length} image(s) processed. ` +
+      `${firstColonized.size}/${parameters.cols * parameters.rows} ` +
+      `cells colonized at some point. ${warning}`;
+
+    $("dlActions").hidden = false;
+  } finally {
+    processing = false;
+    $("run").disabled = items.length === 0;
+  }
+}
+
+/* -------------------------------------------------------
+   Three-level mapping
+------------------------------------------------------- */
+
+function heightThresholds() {
+  const mid = Number($("heightMid").value);
+  const full = Number($("heightFull").value);
+
+  if (
+    !Number.isFinite(mid) ||
+    !Number.isFinite(full) ||
+    mid < 0 ||
+    full > 100 ||
+    mid >= full
+  ) {
+    throw new Error(
+      "Height cut-offs must satisfy 0 ≤ middle < full ≤ 100."
+    );
+  }
+
+  return { mid, full };
+}
+
+function heightForCoverage(fraction, thresholds = heightThresholds()) {
+  const percent = fraction * 100;
+
+  if (percent >= thresholds.full) return 1;
+  if (percent >= thresholds.mid) return 0.5;
+
+  return 0;
+}
+
+function stopPlayback() {
+  clearInterval(playbackTimer);
+  playbackTimer = null;
+
+  $("playFrames").textContent = "Play image sequence";
+}
+
+function invalidateModel(message) {
+  stopPlayback();
+
+  processedFrames = [];
+  activeFrame = 0;
+  lastResult = null;
+
+  [
+    "playFrames",
+    "frameSelect",
+    "frameRange",
+    "downloadHeights",
+    "downloadSequence"
+  ].forEach(id => {
+    $(id).disabled = true;
+  });
+
+  $("frameSelect").replaceChildren(
+    new Option("Process images to load the sequence", "")
+  );
+
+  $("frameRange").max = 0;
+  $("frameRange").value = 0;
+
+  $("dlActions").hidden = true;
+  $("results").replaceChildren();
+
+  modelMessage(message);
+
+  if (!items.length) {
+    previewFrame = null;
+    activeCoverage = [];
+    targetHeights.fill(0);
+
+    $("restoreFrame").disabled = true;
+    updateModelTelemetry();
+  }
+}
+
+function markAnalysisChanged(message) {
+  inputRevision++;
+  invalidateModel(message);
+}
+
+function frameFromResult(result) {
+  return {
+    name: result.it.file.name,
+    time: result.t,
+    imageNumber: result.num,
+    cols: result.res.nx,
+    rows: result.res.ny,
+    coverage: Array.from(result.res.frac),
+    rates: Array.from(result.res.level),
+    env: result.env
+  };
+}
+
+function acceptProcessedResults(results) {
+  stopPlayback();
+
+  processedFrames = results.map(frameFromResult);
+  $("frameSelect").replaceChildren();
+
+  processedFrames.forEach((frame, index) => {
+    $("frameSelect").add(new Option(
+      `${index + 1} · ${frame.name} · ${frame.time} h`,
+      String(index)
+    ));
+  });
+
+  [
+    "playFrames",
+    "frameSelect",
+    "frameRange",
+    "downloadHeights",
+    "downloadSequence",
+    "restoreFrame"
+  ].forEach(id => {
+    $(id).disabled = false;
+  });
+
+  $("frameRange").max = Math.max(0, processedFrames.length - 1);
+  showFrame(0);
+}
+
+function previewModel(result, item) {
+  if (processedFrames.length) return;
+
+  previewFrame = {
+    name: item.file.name,
+    time: effTime(item),
+    cols: result.nx,
+    rows: result.ny,
+    coverage: Array.from(result.frac),
+    rates: Array.from(result.level)
+  };
+
+  applyModelFrame(previewFrame);
+
+  modelMessage(
+    `Live preview · ${item.file.name} · process all images for playback.`
+  );
+}
+
+function applyModelFrame(frame) {
+  if (!frame) return;
+
+  const thresholds = heightThresholds();
+
+  if (
+    modelCols !== frame.cols ||
+    modelRows !== frame.rows ||
+    !targetHeights.length
+  ) {
+    rebuildPins(frame.cols, frame.rows);
+  }
+
+  activeCoverage = frame.coverage.slice();
+
+  targetHeights = frame.coverage.map(fraction => {
+    return heightForCoverage(fraction, thresholds);
+  });
+
+  $("restoreFrame").disabled = false;
+
+  updateModelTelemetry();
+}
+
+function showFrame(index) {
+  if (!processedFrames.length) return;
+
+  activeFrame = Math.max(
+    0,
+    Math.min(processedFrames.length - 1, Number(index))
+  );
+
+  const frame = processedFrames[activeFrame];
+
+  applyModelFrame(frame);
+
+  $("frameSelect").value = String(activeFrame);
+  $("frameRange").value = String(activeFrame);
+
+  modelMessage(
+    `Image ${activeFrame + 1}/${processedFrames.length} · ` +
+    `${frame.name} · ${frame.time} h`
+  );
+
+  const itemIndex = items.findIndex(item => {
+    return item.file.name === frame.name &&
+      effTime(item) === frame.time;
+  });
+
+  if (itemIndex >= 0 && selected !== itemIndex) {
+    selected = itemIndex;
+    renderList();
+    buildImagePanel();
+    updatePreview();
+  }
+}
+
+function travelValue() {
+  const travel = Number($("travelMm").value);
+
+  if (!Number.isFinite(travel) || travel <= 0 || travel > 100) {
+    throw new Error("Travel must be greater than 0 and at most 100 mm.");
+  }
+
+  return travel;
+}
+
+function heightCSV() {
+  const thresholds = heightThresholds();
+  const travel = travelValue();
+
+  const lines = [csvRow([
+    "Image Name",
+    "Image Number",
+    "Time (h)",
+    "Column",
+    "Row",
+    "Pin",
+    "Raw White Fraction (%)",
+    "Colonization Rate",
+    "Height (%)",
+    "Height (mm)"
+  ])];
+
+  processedFrames.forEach(frame => {
+    frame.coverage.forEach((coverage, index) => {
+      const height = heightForCoverage(coverage, thresholds);
+
+      lines.push(csvRow([
+        frame.name,
+        frame.imageNumber,
+        frame.time,
+        index % frame.cols + 1,
+        Math.floor(index / frame.cols) + 1,
+        index + 1,
+        (coverage * 100).toFixed(4),
+        frame.rates[index],
+        height * 100,
+        height * travel
+      ]));
+    });
+  });
+
+  return lines.join("\n");
+}
+
+function sequenceData() {
+  const thresholds = heightThresholds();
+
+  return {
+    version: 1,
+    order: "row-major, top-left first",
+    source: "processed images",
+
+    heightMapping: {
+      source: "raw white coverage (%)",
+      middleStartsAt: thresholds.mid,
+      fullStartsAt: thresholds.full,
+      levels: [0, 50, 100]
+    },
+
+    travelMm: travelValue(),
+    frameIntervalSeconds: Number($("frameSeconds").value),
+
+    frames: processedFrames.map(frame => {
+      return {
+        ...frame,
+        heightPercent: frame.coverage.map(coverage => {
+          return heightForCoverage(coverage, thresholds) * 100;
+        })
+      };
+    })
+  };
+}
+
+/* -------------------------------------------------------
+   Servo telemetry and Arduino matrix
+------------------------------------------------------- */
+
+function calibration() {
+  const min = Number($("inputMinPulse").value);
+  const max = Number($("inputMaxPulse").value);
+  const low = Number($("inputMinAngle").value);
+  const high = Number($("inputMaxAngle").value);
+
+  if (
+    ![min, max, low, high].every(Number.isFinite) ||
+    min < 1 ||
+    max > 4095 ||
+    min >= max ||
+    low < 0 ||
+    low > 180 ||
+    high < 0 ||
+    high > 180
+  ) {
+    throw new Error(
+      "Check PWM counts (1–4095, increasing) and angles (0–180°)."
+    );
+  }
+
+  return { min, max, low, high };
+}
+
+function cppMatrix(name, values, type) {
+  const rows = [];
+
+  for (let row = 0; row < modelRows; row++) {
+    const valuesInRow = values.slice(
+      row * modelCols,
+      (row + 1) * modelCols
+    );
+
+    rows.push("  {" + valuesInRow.join(", ") + "}");
+  }
+
+  return (
+    `const ${type} ${name}[${modelRows}][${modelCols}] = {\n` +
+    rows.join(",\n") +
+    "\n};"
+  );
+}
+
+function updateModelTelemetry() {
+  let config;
+  let travel;
+
+  try {
+    config = calibration();
+    travel = travelValue();
+    heightThresholds();
+  } catch (error) {
+    modelMessage(error.message);
+    return;
+  }
+
+  const counts = [0, 0, 0];
+  const angles = [];
+  const percentages = [];
+
+  targetHeights.forEach((height, index) => {
+    counts[Math.round(height * 2)]++;
+
+    const percent = height * 100;
+
+    const angle = Math.round(
+      config.low + height * (config.high - config.low)
+    );
+
+    const pwm = Math.round(
+      config.min + angle / 180 * (config.max - config.min)
+    );
+
+    angles.push(angle);
+    percentages.push(percent);
+
+    const cell = $("pin-" + index);
+
+    if (cell) {
+      cell.innerHTML =
+        `<small>#${index + 1}</small>${percent}%`;
+
+      cell.style.background =
+        `rgba(77,232,180,${0.04 + height * 0.27})`;
+
+      cell.setAttribute(
+        "aria-label",
+        `Pin ${index + 1}, target ${percent} percent`
+      );
+    }
+
+    const row = $("telem-" + index);
+    const board = 0x40 + Math.floor(index / 16);
+
+    const coverage = activeCoverage[index] === undefined
+      ? "—"
+      : (activeCoverage[index] * 100).toFixed(1) + "%";
+
+    if (row) {
+      row.innerHTML = `
+        <td>
+          #${index + 1} /
+          R${Math.floor(index / modelCols) + 1}
+          C${index % modelCols + 1}
+        </td>
+        <td>${coverage}</td>
+        <td>${percent}%</td>
+        <td>${height * travel} mm</td>
+        <td>0x${board.toString(16)} / ${index % 16}</td>
+        <td>${angle}°</td>
+        <td>${pwm}</td>
+      `;
+    }
+  });
+
+  $("pinSummary").textContent =
+    `${modelCols} × ${modelRows} · ${targetHeights.length} pins · ` +
+    `0%: ${counts[0]} · 50%: ${counts[1]} · 100%: ${counts[2]}`;
+
+  $("cppOutput").textContent =
+    "// Current target frame, row-major order.\n" +
+    cppMatrix("height_percent", percentages, "uint8_t") +
+    "\n\n" +
+    cppMatrix("servo_angles", angles, "uint8_t") +
+    "\n\n" +
+    "// PCA9685 frequency: 50 Hz\n" +
+    `// PWM count at 0 degrees: ${config.min}\n` +
+    `// PWM count at 180 degrees: ${config.max}\n` +
+    "// Zero-based pin i uses board 0x40 + i / 16, channel i % 16.\n" +
+    "// Calibrate your linkage before hardware use.";
+}
+
+/* -------------------------------------------------------
+   Build model and pin grid
+------------------------------------------------------- */
+
+function rebuildPins(cols, rows) {
+  modelCols = cols;
+  modelRows = rows;
+
+  const total = cols * rows;
+
+  targetHeights = Array(total).fill(0);
+  displayHeights = Array(total).fill(0);
+
+  $("grid2d").style.gridTemplateColumns =
+    `repeat(${cols}, minmax(40px, 1fr))`;
+
+  $("grid2d").replaceChildren();
+  $("telemetryTableBody").replaceChildren();
+
+  for (let index = 0; index < total; index++) {
+    const button = document.createElement("button");
+
+    button.className = "pin-cell";
+    button.id = "pin-" + index;
+
+    button.onclick = () => {
+      stopPlayback();
+
+      targetHeights[index] =
+        (targetHeights[index] + 0.5) % 1.5;
+
+      modelMessage(
+        `Manual target · pin ${index + 1} · ` +
+        `${targetHeights[index] * 100}%`
+      );
+
+      updateModelTelemetry();
+    };
+
+    $("grid2d").appendChild(button);
+
+    const tableRow = document.createElement("tr");
+    tableRow.id = "telem-" + index;
+
+    $("telemetryTableBody").appendChild(tableRow);
+  }
+
+  if (renderer && scene) {
+    if (pinGroup) {
+      scene.remove(pinGroup);
+
+      pinGroup.traverse(object => {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) object.material.dispose();
+      });
+    }
+
+    pinGroup = new THREE.Group();
+    scene.add(pinGroup);
+
+    pinMeshes = [];
+    rods = [];
+
+    const width = (cols - 1) * 40 + 80;
+    const depth = (rows - 1) * 40 + 80;
+
+    for (const y of [-20, 20]) {
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(width, 5, depth),
+        new THREE.MeshStandardMaterial({
+          color: 0x17362b,
+          metalness: 0.35,
+          roughness: 0.6,
+          transparent: true,
+          opacity: 0.55
+        })
+      );
+
+      plate.position.y = y;
+      pinGroup.add(plate);
+    }
+
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < cols; column++) {
+        const x = (column - (cols - 1) / 2) * 40;
+        const z = (row - (rows - 1) / 2) * 40;
+
+        const pin = new THREE.Mesh(
+          new THREE.CylinderGeometry(6, 6, 80, 16),
+          new THREE.MeshStandardMaterial({
+            color: 0xd4ae5a,
+            roughness: 0.4,
+            metalness: 0.3
+          })
+        );
+
+        pin.position.set(x, -14, z);
+
+        pinGroup.add(pin);
+        pinMeshes.push(pin);
+
+        const rod = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.5, 1.5, 30, 8),
+          new THREE.MeshStandardMaterial({
+            color: 0x4de8b4
+          })
+        );
+
+        rod.position.set(x, -65, z);
+
+        pinGroup.add(rod);
+        rods.push(rod);
+      }
+    }
+
+    viewDistance = Math.max(width, depth) * 1.5;
+    setCameraView("iso");
+  }
+
+  updateModelTelemetry();
+}
+
+function setCameraView(view) {
+  fallbackView = view;
+
+  if (!camera) return;
+
+  if (view === "top") {
+    camera.position.set(0, viewDistance * 1.4, 0.1);
+  } else if (view === "side") {
+    camera.position.set(viewDistance * 1.5, 45, 0);
+  } else {
+    camera.position.set(
+      viewDistance,
+      viewDistance * 0.85,
+      viewDistance
+    );
+  }
+
+  camera.lookAt(0, 0, 0);
+}
+
+function initModelScene() {
+  if (typeof THREE === "undefined") {
+    return;
+  }
+
+  const container = $("canvas3d");
+
+  try {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050d0b);
+
+    camera = new THREE.PerspectiveCamera(
+      45,
+      1,
+      0.1,
+      20000
+    );
+
+    renderer = new THREE.WebGLRenderer({
+      antialias: true
+    });
+
+    renderer.setPixelRatio(
+      Math.min(2, window.devicePixelRatio || 1)
+    );
+
+    container.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+
+    const light = new THREE.DirectionalLight(0xffffff, 0.9);
+    light.position.set(200, 400, 100);
+
+    scene.add(light);
+
+    function resize() {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      renderer.setSize(width, height);
+
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    new ResizeObserver(resize).observe(container);
+    resize();
+
+    let previous = null;
+
+    container.addEventListener("pointerdown", event => {
+      previous = {
+        x: event.clientX,
+        y: event.clientY
+      };
+
+      container.setPointerCapture(event.pointerId);
+    });
+
+    container.addEventListener("pointerup", () => {
+      previous = null;
+    });
+
+    container.addEventListener("pointercancel", () => {
+      previous = null;
+    });
+
+    container.addEventListener("pointermove", event => {
+      if (!previous) return;
+
+      const dx = event.clientX - previous.x;
+      const dy = event.clientY - previous.y;
+
+      const spherical = new THREE.Spherical()
+        .setFromVector3(camera.position);
+
+      spherical.theta -= dx * 0.007;
+
+      spherical.phi = Math.max(
+        0.03,
+        Math.min(
+          Math.PI - 0.03,
+          spherical.phi + dy * 0.007
+        )
+      );
+
+      camera.position.setFromSpherical(spherical);
+      camera.lookAt(0, 0, 0);
+
+      previous = {
+        x: event.clientX,
+        y: event.clientY
+      };
+    });
+
+    container.addEventListener("wheel", event => {
+      event.preventDefault();
+
+      const length = camera.position.length();
+
+      const nextLength = Math.max(
+        60,
+        Math.min(
+          12000,
+          length * Math.exp(event.deltaY * 0.001)
+        )
+      );
+
+      camera.position.multiplyScalar(nextLength / length);
+    }, { passive: false });
+
+  } catch (error) {
+    renderer = null;
+    scene = null;
+    camera = null;
+    container.replaceChildren();
+  }
+}
+
+/* -------------------------------------------------------
+   Canvas model fallback
+------------------------------------------------------- */
+
+function initFallback() {
+  const container = $("canvas3d");
+
+  container.replaceChildren();
+
+  fallbackCanvas = document.createElement("canvas");
+  container.appendChild(fallbackCanvas);
+
+  let previousX = null;
+
+  container.addEventListener("pointerdown", event => {
+    previousX = event.clientX;
+    container.setPointerCapture(event.pointerId);
+  });
+
+  container.addEventListener("pointerup", () => {
+    previousX = null;
+  });
+
+  container.addEventListener("pointercancel", () => {
+    previousX = null;
+  });
+
+  container.addEventListener("pointermove", event => {
+    if (previousX === null) return;
+
+    fallbackView = "iso";
+
+    fallbackRotation +=
+      (event.clientX - previousX) * 0.008;
+
+    previousX = event.clientX;
+  });
+
+  container.addEventListener("wheel", event => {
+    event.preventDefault();
+
+    fallbackScale = Math.max(
+      0.4,
+      Math.min(
+        3,
+        fallbackScale * Math.exp(-event.deltaY * 0.001)
+      )
+    );
+  }, { passive: false });
+}
+
+function drawFallback() {
+  if (!fallbackCanvas) return;
+
+  const width = fallbackCanvas.clientWidth;
+  const height = fallbackCanvas.clientHeight;
+
+  const dpr = Math.min(
+    2,
+    window.devicePixelRatio || 1
+  );
+
+  const pixelWidth = Math.round(width * dpr);
+  const pixelHeight = Math.round(height * dpr);
+
+  if (
+    fallbackCanvas.width !== pixelWidth ||
+    fallbackCanvas.height !== pixelHeight
+  ) {
+    fallbackCanvas.width = pixelWidth;
+    fallbackCanvas.height = pixelHeight;
+  }
+
+  const context = fallbackCanvas.getContext("2d");
+
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  context.clearRect(0, 0, width, height);
+
+  const scale = Math.min(
+    width / ((modelCols + modelRows) * 0.85 + 2),
+    height / ((modelCols + modelRows) * 0.45 + 3)
+  ) * fallbackScale;
+
+  const angle = Math.PI / 4 + fallbackRotation;
+  const travel = Number($("travelMm").value) || 20;
+
+  function project(x, z, y = 0) {
+    const rotatedX =
+      x * Math.cos(angle) - z * Math.sin(angle);
+
+    const rotatedZ =
+      x * Math.sin(angle) + z * Math.cos(angle);
+
+    if (fallbackView === "top") {
+      return [
+        width / 2 + x * scale,
+        height / 2 + z * scale
+      ];
+    }
+
+    if (fallbackView === "side") {
+      return [
+        width / 2 + x * scale,
+        height * 0.65 - y * scale
+      ];
+    }
+
+    return [
+      width / 2 + rotatedX * scale,
+      height * 0.58 + rotatedZ * scale * 0.5 - y * scale
+    ];
+  }
+
+  const corners = [
+    [-modelCols / 2 - 0.4, -modelRows / 2 - 0.4],
+    [ modelCols / 2 + 0.4, -modelRows / 2 - 0.4],
+    [ modelCols / 2 + 0.4,  modelRows / 2 + 0.4],
+    [-modelCols / 2 - 0.4,  modelRows / 2 + 0.4]
+  ];
+
+  context.beginPath();
+
+  corners.forEach(([x, z], index) => {
+    const position = project(x, z);
+
+    if (index === 0) {
+      context.moveTo(...position);
+    } else {
+      context.lineTo(...position);
+    }
+  });
+
+  context.closePath();
+  context.fillStyle = "#102b22";
+  context.fill();
+
+  context.strokeStyle = "#4b7966";
+  context.lineWidth = 1;
+  context.stroke();
+
+  const pins = displayHeights.map((pinHeight, index) => {
+    return {
+      height: pinHeight,
+      index,
+      x: index % modelCols - (modelCols - 1) / 2,
+      z: Math.floor(index / modelCols) - (modelRows - 1) / 2
+    };
+  });
+
+  pins.sort((a, b) => {
+    const depthA =
+      a.x * Math.sin(angle) + a.z * Math.cos(angle);
+
+    const depthB =
+      b.x * Math.sin(angle) + b.z * Math.cos(angle);
+
+    return depthA - depthB;
+  });
+
+  for (const pin of pins) {
+    const base = project(pin.x, pin.z);
+
+    const top = project(
+      pin.x,
+      pin.z,
+      0.18 + pin.height * travel / 20
+    );
+
+    const radius = Math.max(2, scale * 0.15);
+
+    const color = pin.height > 0.74
+      ? "#d4ae5a"
+      : pin.height > 0.24
+        ? "#4de8b4"
+        : "#6c8b7e";
+
+    context.strokeStyle = color;
+    context.lineWidth = radius * 2;
+
+    if (fallbackView !== "top") {
+      context.beginPath();
+      context.moveTo(...base);
+      context.lineTo(...top);
+      context.stroke();
+    }
+
+    context.beginPath();
+
+    context.ellipse(
+      top[0],
+      top[1],
+      radius,
+      fallbackView === "top" ? radius : radius * 0.5,
+      0,
+      0,
+      Math.PI * 2
+    );
+
+    context.fillStyle = color;
+    context.fill();
+
+    if (pins.length <= 64) {
+      context.fillStyle = "#e8f4ee";
+      context.font = "11px monospace";
+      context.textAlign = "center";
+
+      context.fillText(
+        String(pin.index + 1),
+        top[0],
+        top[1] - 8
+      );
+    }
+  }
+
+  context.fillStyle = "#9bbdae";
+  context.font = "12px monospace";
+  context.textAlign = "left";
+  context.fillText("ROW 1 = IMAGE TOP", 14, 24);
+}
+
+/* -------------------------------------------------------
+   Model animation
+------------------------------------------------------- */
+
+function animateModel(now) {
+  requestAnimationFrame(animateModel);
+
+  const dt = Math.min(
+    0.1,
+    Math.max(0, (now - lastAnimationTime) / 1000)
+  );
+
+  lastAnimationTime = now;
+
+  const travel = Number($("travelMm").value) || 20;
+
+  const reducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
+
+  displayHeights.forEach((height, index) => {
+    const target = targetHeights[index];
+
+    displayHeights[index] = reducedMotion
+      ? target
+      : height + (target - height) * (1 - Math.exp(-dt * 4));
+
+    if (pinMeshes[index]) {
+      pinMeshes[index].position.y =
+        -14 + displayHeights[index] * travel;
+
+      rods[index].position.y =
+        pinMeshes[index].position.y - 51;
+    }
+  });
+
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera);
+  } else {
+    drawFallback();
+  }
+}
+
+function updateMapping() {
+  try {
+    const thresholds = heightThresholds();
+
+    $("mappingNote").className = "note";
+
+    $("mappingNote").textContent =
+      `Coverage below ${thresholds.mid}% → height 0%; ` +
+      `${thresholds.mid}% to below ${thresholds.full}% → height 50%; ` +
+      `${thresholds.full}% and above → height 100%.`;
+
+    if (processedFrames.length) {
+      showFrame(activeFrame);
+    } else if (previewFrame) {
+      applyModelFrame(previewFrame);
+    }
+
+    if (lastResult) {
+      $("status").textContent =
+        "Height mapping updated. Downloads use current height settings.";
+    }
+  } catch (error) {
+    $("mappingNote").className = "note warn";
+    $("mappingNote").textContent = error.message;
+
+    stopPlayback();
+  }
+}
+
+/* -------------------------------------------------------
+   Background drawing
+------------------------------------------------------- */
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = seed + 0x6D2B79F5 | 0;
+
+    let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
+
+    value = value +
+      Math.imul(value ^ value >>> 7, 61 | value) ^
+      value;
+
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function drawBackground(animate) {
+  const canvas = $("bg");
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+
+  const context = canvas.getContext("2d");
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  context.clearRect(0, 0, width, height);
+
+  const random = mulberry32(20261111);
+  const radius = Math.max(46, Math.min(width, height) * 0.1);
+
+  context.strokeStyle = "rgba(212,174,90,.14)";
+  context.lineWidth = 1;
+
+  for (let ring = 0; ring < 2; ring++) {
+    for (let index = 0; index < 6; index++) {
+      const angle = index * Math.PI / 3;
+
+      const x =
+        width * 0.93 + Math.cos(angle) * radius * ring;
+
+      const y =
+        height * 0.12 + Math.sin(angle) * radius * ring;
+
+      context.beginPath();
+      context.arc(x, y, radius, 0, Math.PI * 2);
+      context.stroke();
+    }
+  }
+
+  const segments = [];
+
+  function grow(x, y, heading, steps, depth, startTime) {
+    let time = startTime;
+
+    for (let index = 0; index < steps; index++) {
+      const angle = heading + (random() - 0.5) * 0.55;
+      const length = 6 + random() * 6;
+
+      const nextX = x + Math.cos(angle) * length;
+      const nextY = y + Math.sin(angle) * length;
+
+      segments.push({
+        x1: x,
+        y1: y,
+        x2: nextX,
+        y2: nextY,
+        width: Math.max(0.5, 2.1 - depth * 0.45),
+        time,
+        end: index === steps - 1
+      });
+
+      x = nextX;
+      y = nextY;
+      heading = angle;
+      time++;
+
+      if (random() < 0.065 && depth < 4) {
+        grow(
+          x,
+          y,
+          angle +
+            (random() < 0.5 ? -1 : 1) *
+            (0.5 + random() * 0.8),
+          Math.floor(steps * 0.62) + 4,
+          depth + 1,
+          time
+        );
+      }
+
+      if (
+        x < -60 ||
+        x > width + 60 ||
+        y < -60 ||
+        y > height + 60
+      ) {
+        break;
+      }
+    }
+  }
+
+  const seeds = [
+    [0, height * 0.3, 0.2],
+    [0, height * 0.75, -0.3],
+    [width * 0.25, height, -1.3],
+    [width * 0.7, height, -1.9],
+    [width, height * 0.45, 3.3],
+    [width, height * 0.85, 3.6],
+    [width * 0.5, 0, 1.5]
+  ];
+
+  seeds.forEach(seed => {
+    grow(
+      seed[0],
+      seed[1],
+      seed[2],
+      70 + Math.floor(random() * 40),
+      0,
+      Math.floor(random() * 12)
+    );
+  });
+
+  segments.sort((a, b) => a.time - b.time);
+
+  function drawSegment(segment) {
+    context.strokeStyle =
+      `rgba(77,232,180,${0.1 + segment.width * 0.07})`;
+
+    context.lineWidth = segment.width;
+    context.lineCap = "round";
+
+    context.beginPath();
+    context.moveTo(segment.x1, segment.y1);
+    context.lineTo(segment.x2, segment.y2);
+    context.stroke();
+
+    if (segment.end) {
+      context.fillStyle = "rgba(212,174,90,.5)";
+      context.beginPath();
+      context.arc(
+        segment.x2,
+        segment.y2,
+        1.8,
+        0,
+        Math.PI * 2
+      );
+      context.fill();
+    }
+  }
+
+  drawBackground.token = (drawBackground.token || 0) + 1;
+  const token = drawBackground.token;
+
+  if (!animate) {
+    segments.forEach(drawSegment);
+    return;
+  }
+
+  const started = performance.now();
+  const maxTime = segments[segments.length - 1].time + 1;
+
+  let index = 0;
+
+  function frame(now) {
+    if (drawBackground.token !== token) return;
+
+    const limit = Math.min(1, (now - started) / 7000) * maxTime;
+
+    while (
+      index < segments.length &&
+      segments[index].time <= limit
+    ) {
+      drawSegment(segments[index]);
+      index++;
+    }
+
+    if (index < segments.length) {
+      requestAnimationFrame(frame);
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
+/* -------------------------------------------------------
+   Event handlers
+------------------------------------------------------- */
+
+function initEvents() {
+  $("pickFiles").onclick = () => $("fileInput").click();
+  $("pickFolder").onclick = () => $("folderInput").click();
+
+  $("fileInput").onchange = event => {
+    addFiles(event.target.files);
+    event.target.value = "";
+  };
+
+  $("folderInput").onchange = event => {
+    addFiles(event.target.files);
+    event.target.value = "";
+  };
+
+  const drop = $("drop");
+
+  ["dragenter", "dragover"].forEach(name => {
+    drop.addEventListener(name, event => {
+      event.preventDefault();
+      drop.classList.add("over");
+    });
+  });
+
+  ["dragleave", "drop"].forEach(name => {
+    drop.addEventListener(name, event => {
+      event.preventDefault();
+      drop.classList.remove("over");
+    });
+  });
+
+  drop.addEventListener("drop", event => {
+    addFiles(event.dataTransfer.files);
+  });
+
+  $("clearAll").onclick = () => {
+    if (processing) return;
+
+    items = [];
+    selected = 0;
+    previewCache = null;
+
+    markAnalysisChanged("All images cleared.");
+
+    renderList();
+    updatePreview();
+  };
+
+  $("threshRange").oninput = () => {
+    $("thresh").value = $("threshRange").value;
+    updatePreview();
+  };
+
+  $("thresh").oninput = () => {
+    $("threshRange").value = $("thresh").value;
+    updatePreview();
+  };
+
+  [
+    "cols",
+    "rows",
+    "mode",
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "showGrid",
+    "showOn",
+    "showNums"
+  ].forEach(id => {
+    $(id).oninput = updatePreview;
+    $(id).onchange = updatePreview;
+  });
+
+  $("auto").onclick = async () => {
+    if (!items.length || processing) return;
+
+    const item = items[selected];
+
+    try {
+      const image =
+        previewCache && previewCache.file === item.file
+          ? previewCache.data
+          : await loadData(item.file);
+
+      if (items[selected] !== item) return;
+
+      const threshold = otsu(image);
+
+      $("thresh").value = threshold;
+      $("threshRange").value = threshold;
+
+      markAnalysisChanged(
+        "Auto threshold updated. Process all images again."
+      );
+
+      updatePreview();
+    } catch (error) {
+      $("status").textContent = error.message;
+    }
+  };
+
+  $("run").onclick = async () => {
+    try {
+      await run();
+    } catch (error) {
+      $("status").className = "note warn";
+      $("status").textContent = error.message;
+    }
+  };
+
+  $("dlCsv").onclick = () => {
+    if (!lastResult) return;
+
+    download(
+      lastResult.csvBlob,
+      PREFIX + "grid_points.csv"
+    );
+  };
+
+  $("dlZip").onclick = () => {
+    if (!lastResult) return;
+
+    try {
+      const encoder = new TextEncoder();
+
+      const files = [
+        ...lastResult.baseFiles,
+        {
+          name: PREFIX + "pin_heights.csv",
+          data: encoder.encode(heightCSV())
+        },
+        {
+          name: PREFIX + "pin_sequence.json",
+          data: encoder.encode(
+            JSON.stringify(sequenceData(), null, 2)
+          )
+        }
+      ];
+
+      download(
+        makeZip(files),
+        PREFIX + "all.zip"
+      );
+    } catch (error) {
+      modelMessage(error.message);
+    }
+  };
+
+  $("frameSelect").onchange = () => {
+    stopPlayback();
+    showFrame($("frameSelect").value);
+  };
+
+  $("frameRange").oninput = () => {
+    stopPlayback();
+    showFrame($("frameRange").value);
+  };
+
+  $("playFrames").onclick = () => {
+    if (playbackTimer) {
+      stopPlayback();
+      return;
+    }
+
+    if (!processedFrames.length) return;
+
+    try {
+      heightThresholds();
+
+      const seconds = Number($("frameSeconds").value);
+
+      if (
+        !Number.isFinite(seconds) ||
+        seconds < 1 ||
+        seconds > 60
+      ) {
+        throw new Error(
+          "Playback interval must be between 1 and 60 seconds."
+        );
+      }
+
+      $("playFrames").textContent = "Pause image sequence";
+
+      playbackTimer = setInterval(() => {
+        showFrame(
+          (activeFrame + 1) % processedFrames.length
+        );
+      }, seconds * 1000);
+
+    } catch (error) {
+      modelMessage(error.message);
+    }
+  };
+
+  $("resetPins").onclick = () => {
+    stopPlayback();
+    targetHeights.fill(0);
+    updateModelTelemetry();
+
+    modelMessage("All target heights set to 0%.");
+  };
+
+  $("restoreFrame").onclick = () => {
+    stopPlayback();
+
+    if (processedFrames.length) {
+      showFrame(activeFrame);
+    } else {
+      applyModelFrame(previewFrame);
+      modelMessage("Live image heights restored.");
+    }
+  };
+
+  [
+    ["camIso", "iso"],
+    ["camTop", "top"],
+    ["camSide", "side"]
+  ].forEach(([id, view]) => {
+    $(id).onclick = () => setCameraView(view);
+  });
+
+  ["heightMid", "heightFull"].forEach(id => {
+    $(id).oninput = () => {
+      stopPlayback();
+      updateMapping();
+    };
+  });
+
+  [
+    "inputMinPulse",
+    "inputMaxPulse",
+    "inputMinAngle",
+    "inputMaxAngle",
+    "travelMm"
+  ].forEach(id => {
+    $(id).oninput = updateModelTelemetry;
+  });
+
+  $("frameSeconds").oninput = stopPlayback;
+
+  $("downloadHeights").onclick = () => {
+    try {
+      download(
+        new Blob([heightCSV()], { type: "text/csv" }),
+        "pin_heights.csv"
+      );
+    } catch (error) {
+      modelMessage(error.message);
+    }
+  };
+
+  $("downloadSequence").onclick = () => {
+    try {
+      download(
+        new Blob(
+          [JSON.stringify(sequenceData(), null, 2)],
+          { type: "application/json" }
+        ),
+        "pin_sequence.json"
+      );
+    } catch (error) {
+      modelMessage(error.message);
+    }
+  };
+
+  $("copyMatrix").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        $("cppOutput").textContent
+      );
+
+      modelMessage("Arduino target matrix copied.");
+    } catch (error) {
+      const range = document.createRange();
+      range.selectNodeContents($("cppOutput"));
+
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      modelMessage(
+        "Matrix selected. Press Ctrl+C or Command+C to copy."
+      );
+    }
+  };
+
+  document.querySelectorAll("[data-demo]").forEach(button => {
+    button.onclick = () => {
+      stopPlayback();
+
+      const stage = Number(button.dataset.demo);
+      activeCoverage = [];
+
+      targetHeights = targetHeights.map((_, index) => {
+        const x =
+          (index % modelCols + 0.5) / modelCols - 0.5;
+
+        const y =
+          (Math.floor(index / modelCols) + 0.5) /
+          modelRows - 0.5;
+
+        const distance = Math.hypot(x, y);
+
+        const density = Math.max(
+          0,
+          1 - distance / (0.2 + stage * 0.3)
+        );
+
+        if (density >= 0.65) return 1;
+        if (density >= 0.15) return 0.5;
+
+        return 0;
+      });
+
+      updateModelTelemetry();
+
+      modelMessage(
+        `Illustrative demo preset T${stage} loaded.`
+      );
+    };
+  });
+
+  ["input", "change"].forEach(eventName => {
+    document.querySelector("main").addEventListener(
+      eventName,
+      event => {
+        if (
+          event.target.closest("#modelPanel") ||
+          event.target.type === "file"
+        ) {
+          return;
+        }
+
+        markAnalysisChanged(
+          "Analysis settings or metadata changed. Process all images again."
+        );
+      }
+    );
+  });
+
+  let resizeTimer = null;
+
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+
+    resizeTimer = setTimeout(() => {
+      drawBackground(false);
+    }, 250);
+  });
+}
+
+/* -------------------------------------------------------
+   Start application
+------------------------------------------------------- */
+
+function init() {
+  buildFieldBlock($("sharedFields"), "sh_", true);
+
+  $("cols").value = CONFIG.gridCols;
+  $("rows").value = CONFIG.gridRows;
+
+  CONFIG.cuts.forEach((value, index) => {
+    $("c" + (index + 1)).value = value;
+  });
+
+  initModelScene();
+
+  if (!renderer) {
+    initFallback();
+  }
+
+  rebuildPins(CONFIG.gridCols, CONFIG.gridRows);
+  initEvents();
+  updateLevelNote();
+  updateMapping();
+
+  const reducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
+
+  drawBackground(!reducedMotion);
+  requestAnimationFrame(animateModel);
+}
+
+init();
+</script>
+</body>
+</html>
