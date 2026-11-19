@@ -1,0 +1,189 @@
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+#include <math.h>
+
+// Board: ESP32S3 Dev Module
+const int SDA_PIN = 11;  // Board label A4
+const int SCL_PIN = 12;  // Board label A5
+
+const uint8_t PCA_ADDRESS = 0x40;
+
+const uint8_t GRID_ROWS = 4;
+const uint8_t GRID_COLS = 4;
+const uint8_t SERVO_COUNT = GRID_ROWS * GRID_COLS;
+
+// Replace this example matrix with height_percent
+// copied from your image-analysis website.
+//
+// Allowed values: 0, 50, 100.
+//
+// Channel order:
+// Row 1 = channels 0–3
+// Row 2 = channels 4–7
+// Row 3 = channels 8–11
+// Row 4 = channels 12–15
+
+const uint8_t height_percent[4][4] = {
+  {  0,  50,  50,   0},
+  { 50, 100, 100,  50},
+  { 50, 100,  50,  50},
+  {  0,  50,  50,   0}
+};
+
+// Pulse widths in microseconds.
+//
+// These are initial test values.
+// Calibrate them to your actual pillar mechanism.
+//
+// LOW_US must correspond to the lowest pillar position.
+// HIGH_US must correspond to the highest pillar position.
+const uint16_t LOW_US = 1300;
+const uint16_t HIGH_US = 1700;
+
+// One complete up-and-down cycle takes 8 seconds.
+const uint32_t WAVE_PERIOD_MS = 8000;
+
+// Delay between adjacent columns.
+// Increase this to make the travelling wave more pronounced.
+const uint32_t COLUMN_DELAY_MS = 1000;
+
+// Update all servo targets approximately every 20 ms.
+const uint32_t UPDATE_INTERVAL_MS = 20;
+
+// Gradually introduce movement after startup.
+const uint32_t FADE_IN_MS = 3000;
+
+const float TWO_PI_F = 6.28318530718f;
+
+Adafruit_PWMServoDriver pwm(PCA_ADDRESS);
+
+uint32_t motionStartMs = 0;
+uint32_t lastUpdateMs = 0;
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  // Validate the image-derived matrix.
+  for (uint8_t row = 0; row < GRID_ROWS; row++) {
+    for (uint8_t col = 0; col < GRID_COLS; col++) {
+      const uint8_t level = height_percent[row][col];
+
+      if (level != 0 && level != 50 && level != 100) {
+        while (true) {
+          Serial.println(
+            "Invalid matrix: use only 0, 50 or 100."
+          );
+          delay(2000);
+        }
+      }
+    }
+  }
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.setClock(100000);
+
+  Wire.beginTransmission(PCA_ADDRESS);
+
+  if (Wire.endTransmission() != 0) {
+    while (true) {
+      Serial.println(
+        "PCA9685 not found. Check wiring and logic power."
+      );
+      delay(2000);
+    }
+  }
+
+  if (!pwm.begin()) {
+    while (true) {
+      Serial.println("PCA9685 initialization failed.");
+      delay(2000);
+    }
+  }
+
+  pwm.setPWMFreq(50);
+  delay(10);
+
+  // Disable all channels before setting initial positions.
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    pwm.setPWM(channel, 0, 4096);
+  }
+
+  // Bring the pillars to their low position in sequence.
+  // Initial movement can be sudden if a servo starts elsewhere.
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    pwm.writeMicroseconds(channel, LOW_US);
+    delay(150);
+  }
+
+  delay(1000);
+
+  motionStartMs = millis();
+  lastUpdateMs = motionStartMs;
+
+  Serial.println(
+    "Image-driven continuous wave started."
+  );
+}
+
+void loop() {
+  const uint32_t now = millis();
+
+  if (now - lastUpdateMs < UPDATE_INTERVAL_MS) {
+    return;
+  }
+
+  lastUpdateMs = now;
+
+  const uint32_t elapsedMs = now - motionStartMs;
+
+  // Fade the wave in over the first few seconds.
+  float fade = 1.0f;
+
+  if (elapsedMs < FADE_IN_MS) {
+    const float progress =
+      static_cast<float>(elapsedMs) / FADE_IN_MS;
+
+    fade = 0.5f - 0.5f * cosf(TWO_PI_F * 0.5f * progress);
+  }
+
+  const uint32_t cycleMs = elapsedMs % WAVE_PERIOD_MS;
+
+  for (uint8_t row = 0; row < GRID_ROWS; row++) {
+    for (uint8_t col = 0; col < GRID_COLS; col++) {
+      const uint8_t channel = row * GRID_COLS + col;
+
+      // Image data determines the maximum movement height.
+      const float imageAmplitude =
+        height_percent[row][col] / 100.0f;
+
+      // Adjacent columns receive delayed wave phases.
+      const float phase =
+        TWO_PI_F *
+        (
+          static_cast<float>(cycleMs) -
+          static_cast<float>(col) * COLUMN_DELAY_MS
+        ) /
+        WAVE_PERIOD_MS;
+
+      // Smooth wave ranging from 0 to 1.
+      const float wave =
+        0.5f - 0.5f * cosf(phase);
+
+      // Final pillar height:
+      // 0% data   -> 0
+      // 50% data  -> 0 to 0.5
+      // 100% data -> 0 to 1
+      const float height =
+        imageAmplitude * wave * fade;
+
+      const float pulseUs =
+        LOW_US + height * (HIGH_US - LOW_US);
+
+      pwm.writeMicroseconds(
+        channel,
+        static_cast<uint16_t>(lroundf(pulseUs))
+      );
+    }
+  }
+}
