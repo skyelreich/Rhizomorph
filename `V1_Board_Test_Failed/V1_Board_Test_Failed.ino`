@@ -1,18 +1,15 @@
 /*
-  V1 - Initial board communication test
+  V2 - Successful board upload test
+
+  Arduino IDE board:
+  ESP32S3 Dev Module
+
+  Serial Monitor:
+  115200 baud
 
   Historical result:
-  Upload failed during the initial configuration attempts.
-
-  Observed errors included:
-  - Device not configured
-  - No DFU capable USB device available
-
-  The sketch itself is a valid serial test.
-  The failure was related to upload configuration or connection.
+  Upload and flash verification succeeded.
 */
-
-unsigned long counter = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -20,9 +17,6 @@ void setup() {
 }
 
 void loop() {
-  Serial.print("ESP32-S3-Zero is running! Count: ");
-  Serial.println(counter);
-
-  counter++;
+  Serial.println("Board test OK");
   delay(1000);
 }
