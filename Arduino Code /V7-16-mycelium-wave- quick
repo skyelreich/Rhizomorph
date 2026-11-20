@@ -195,7 +195,7 @@ const uint16_t topPulseUs[SERVO_COUNT] = {
 
 // Time between consecutive image targets.
 // Smaller = faster.
-constexpr uint32_t FRAME_INTERVAL_MS = 1500;
+constexpr uint32_t FRAME_INTERVAL_MS = 2000;
 
 // Delay between neighbouring columns.
 // Set to 0 for synchronized image shapes.
