@@ -1,0 +1,502 @@
+/*
+  MYCELIUM IMAGE SEQUENCE
+  ----------------------
+  Hardware:
+  - ESP32-S3
+  - One PCA9685 at address 0x40
+  - 16 positional servos
+
+  Arduino IDE board:
+  ESP32S3 Dev Module
+
+  Wiring:
+  GPIO11 -> SDA
+  GPIO12 -> SCL
+  3V3    -> PCA9685 VCC
+  GND    -> PCA9685 GND
+
+  Use an external servo power supply connected to V+ and GND.
+  Connect all grounds together.
+
+  Behaviour:
+  Image 1 -> Image 2 -> ... -> Image 8 -> Image 1
+  Repeat continuously.
+
+  The image shapes are interpolated smoothly.
+  No travelling wave is added.
+*/
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+#include <math.h>
+
+// ============================================================
+// 1. HARDWARE
+// ============================================================
+
+constexpr int SDA_PIN = 11;
+constexpr int SCL_PIN = 12;
+
+constexpr uint8_t PCA_ADDRESS = 0x40;
+
+constexpr uint8_t GRID_ROWS = 4;
+constexpr uint8_t GRID_COLS = 4;
+
+constexpr uint8_t SERVO_COUNT =
+    GRID_ROWS * GRID_COLS;
+
+constexpr uint8_t FRAME_COUNT = 8;
+
+Adafruit_PWMServoDriver pwm(PCA_ADDRESS);
+
+// Channel order:
+//
+//             Column
+//            1  2  3  4
+//
+// Row 1:     0  1  2  3
+// Row 2:     4  5  6  7
+// Row 3:     8  9 10 11
+// Row 4:    12 13 14 15
+
+// ============================================================
+// 2. IMAGE DATA
+// ============================================================
+
+// Values transcribed from the eight uploaded image overlays.
+//
+// These are analysis levels:
+// 0, 5, 10, 15, 20
+//
+// They are NOT servo angles or direct height percentages.
+
+const uint8_t imageLevels
+    [FRAME_COUNT][GRID_ROWS][GRID_COLS] = {
+
+  // IMAGE 1
+  {
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 2
+  {
+    { 0,  5,  0, 0},
+    { 0,  5,  5, 0},
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 3
+  {
+    { 0,  5,  5, 0},
+    { 0, 10,  5, 0},
+    { 0,  5,  5, 0},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 4
+  {
+    { 0, 10,  5, 0},
+    { 0, 15, 10, 0},
+    { 0, 10, 10, 5},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 5
+  {
+    { 0, 10, 10, 0},
+    { 0, 20, 10, 0},
+    { 0, 10, 15, 5},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 6
+  {
+    { 5, 10, 10, 0},
+    { 5, 20, 15, 0},
+    { 0, 20, 20, 0},
+    { 0,  0,  5, 0}
+  },
+
+  // IMAGE 7
+  {
+    { 5, 10, 10, 0},
+    { 5, 20, 15, 0},
+    { 0, 20, 20, 5},
+    { 0,  5, 10, 0}
+  },
+
+  // IMAGE 8
+  {
+    {10, 15, 15, 0},
+    {10, 20, 20, 0},
+    { 5, 20, 20, 5},
+    { 0,  5, 10, 0}
+  }
+};
+
+// ============================================================
+// 3. HEIGHT MAPPING
+// ============================================================
+
+// true:
+// Three target heights:
+// 0       -> 0%
+// 5, 10   -> 50%
+// 15, 20  -> 100%
+//
+// false:
+// Preserve all five analysis levels as target heights:
+// 0  -> 0%
+// 5  -> 25%
+// 10 -> 50%
+// 15 -> 75%
+// 20 -> 100%
+
+constexpr bool USE_THREE_HEIGHTS = true;
+
+float levelToHeight(uint8_t level) {
+  if (USE_THREE_HEIGHTS) {
+    if (level == 0) {
+      return 0.0f;
+    }
+
+    if (level <= 10) {
+      return 0.5f;
+    }
+
+    return 1.0f;
+  }
+
+  return level / 20.0f;
+}
+
+// ============================================================
+// 4. SERVO CALIBRATION
+// ============================================================
+
+// Pulse widths in MICROSECONDS.
+//
+// These retain the initial range used in the previous test.
+// They do NOT use the website's example 30-150 degree mapping.
+//
+// Calibrate each servo to its physical linkage.
+//
+// If one pillar moves in the opposite direction,
+// swap that channel's bottom and top pulse values.
+
+const uint16_t bottomPulseUs[SERVO_COUNT] = {
+  1300, 1300, 1300, 1300,
+  1300, 1300, 1300, 1300,
+  1300, 1300, 1300, 1300,
+  1300, 1300, 1300, 1300
+};
+
+const uint16_t topPulseUs[SERVO_COUNT] = {
+  1700, 1700, 1700, 1700,
+  1700, 1700, 1700, 1700,
+  1700, 1700, 1700, 1700,
+  1700, 1700, 1700, 1700
+};
+
+// ============================================================
+// 5. TIMING
+// ============================================================
+
+// Transition from one image shape to the next.
+constexpr uint32_t TRANSITION_MS = 3000;
+
+// Hold each completed image shape.
+constexpr uint32_t HOLD_MS = 2000;
+
+// Return from image 8 to image 1.
+constexpr uint32_t RESET_TRANSITION_MS = 5000;
+
+// Update all channels approximately every 20 ms.
+constexpr uint32_t UPDATE_INTERVAL_MS = 20;
+
+// Initial commands are staggered between channels.
+constexpr uint32_t STARTUP_CHANNEL_DELAY_MS = 150;
+
+static_assert(TRANSITION_MS > 0, "Invalid transition time.");
+static_assert(
+  RESET_TRANSITION_MS > 0,
+  "Invalid reset transition time."
+);
+
+// ============================================================
+// 6. RUNTIME STATE
+// ============================================================
+
+float currentHeights[SERVO_COUNT] = {0};
+float startHeights[SERVO_COUNT] = {0};
+float targetHeights[SERVO_COUNT] = {0};
+
+uint16_t lastPulseUs[SERVO_COUNT] = {0};
+
+uint8_t currentFrame = 0;
+
+bool transitioning = false;
+
+uint32_t phaseStartMs = 0;
+uint32_t lastUpdateMs = 0;
+
+uint32_t activeTransitionMs = TRANSITION_MS;
+
+// ============================================================
+// 7. HELPER FUNCTIONS
+// ============================================================
+
+void fatalError(const char* message) {
+  while (true) {
+    Serial.println(message);
+    delay(2000);
+  }
+}
+
+bool imageDataIsValid() {
+  for (uint8_t frame = 0; frame < FRAME_COUNT; frame++) {
+    for (uint8_t row = 0; row < GRID_ROWS; row++) {
+      for (uint8_t col = 0; col < GRID_COLS; col++) {
+        uint8_t value = imageLevels[frame][row][col];
+
+        if (
+          value != 0 &&
+          value != 5 &&
+          value != 10 &&
+          value != 15 &&
+          value != 20
+        ) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+void writeHeight(uint8_t channel, float height) {
+  height = constrain(height, 0.0f, 1.0f);
+
+  const float bottom =
+      static_cast<float>(bottomPulseUs[channel]);
+
+  const float top =
+      static_cast<float>(topPulseUs[channel]);
+
+  const float pulse =
+      bottom + height * (top - bottom);
+
+  const uint16_t pulseUs =
+      static_cast<uint16_t>(lroundf(pulse));
+
+  if (pulseUs != lastPulseUs[channel]) {
+    pwm.writeMicroseconds(channel, pulseUs);
+    lastPulseUs[channel] = pulseUs;
+  }
+}
+
+// Smooth interpolation with zero slope at both ends.
+float smoothStep(float progress) {
+  progress = constrain(progress, 0.0f, 1.0f);
+
+  return progress * progress * (3.0f - 2.0f * progress);
+}
+
+void loadFrameTargets(uint8_t frame) {
+  for (uint8_t row = 0; row < GRID_ROWS; row++) {
+    for (uint8_t col = 0; col < GRID_COLS; col++) {
+      const uint8_t channel = row * GRID_COLS + col;
+
+      targetHeights[channel] =
+          levelToHeight(imageLevels[frame][row][col]);
+    }
+  }
+}
+
+void printFrameTargets(uint8_t frame) {
+  Serial.println();
+
+  Serial.print("Image ");
+  Serial.print(frame + 1);
+  Serial.print(" / ");
+  Serial.println(FRAME_COUNT);
+
+  Serial.println("Target heights:");
+
+  for (uint8_t row = 0; row < GRID_ROWS; row++) {
+    for (uint8_t col = 0; col < GRID_COLS; col++) {
+      const uint8_t channel = row * GRID_COLS + col;
+
+      Serial.print(
+        static_cast<int>(
+          lroundf(targetHeights[channel] * 100.0f)
+        )
+      );
+
+      Serial.print("%\t");
+    }
+
+    Serial.println();
+  }
+}
+
+void beginTransition(uint8_t nextFrame, uint32_t now) {
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    startHeights[channel] = currentHeights[channel];
+  }
+
+  currentFrame = nextFrame;
+  loadFrameTargets(currentFrame);
+
+  activeTransitionMs =
+      currentFrame == 0
+      ? RESET_TRANSITION_MS
+      : TRANSITION_MS;
+
+  phaseStartMs = now;
+  transitioning = true;
+
+  printFrameTargets(currentFrame);
+
+  if (currentFrame == 0) {
+    Serial.println("Returning to image 1.");
+  } else {
+    Serial.println("Moving to next image.");
+  }
+}
+
+// ============================================================
+// 8. SETUP
+// ============================================================
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  Serial.println();
+  Serial.println("MYCELIUM IMAGE SEQUENCE");
+  Serial.println("8 images / 16 servos / continuous loop");
+
+  if (!imageDataIsValid()) {
+    fatalError("Invalid image level. Use 0, 5, 10, 15 or 20.");
+  }
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.setClock(100000);
+
+  Wire.beginTransmission(PCA_ADDRESS);
+
+  if (Wire.endTransmission() != 0) {
+    fatalError(
+      "PCA9685 not found at 0x40. Check wiring and logic power."
+    );
+  }
+
+  if (!pwm.begin()) {
+    fatalError("PCA9685 initialization failed.");
+  }
+
+  pwm.setPWMFreq(50);
+  delay(10);
+
+  // Disable all outputs before setting initial positions.
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    pwm.setPWM(channel, 0, 4096);
+  }
+
+  // First image contains all minimum-height targets.
+  currentFrame = 0;
+  loadFrameTargets(currentFrame);
+
+  Serial.println("Setting initial image positions...");
+
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    currentHeights[channel] = targetHeights[channel];
+    startHeights[channel] = targetHeights[channel];
+
+    writeHeight(channel, currentHeights[channel]);
+
+    // First physical movement can still be sudden:
+    // the controller does not know the initial servo position.
+    delay(STARTUP_CHANNEL_DELAY_MS);
+  }
+
+  printFrameTargets(currentFrame);
+
+  transitioning = false;
+  phaseStartMs = millis();
+  lastUpdateMs = phaseStartMs;
+
+  Serial.println("Holding image 1. Sequence will repeat.");
+}
+
+// ============================================================
+// 9. CONTINUOUS IMAGE SEQUENCE
+// ============================================================
+
+void loop() {
+  const uint32_t now = millis();
+
+  if (
+    static_cast<uint32_t>(now - lastUpdateMs) <
+    UPDATE_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  lastUpdateMs = now;
+
+  if (transitioning) {
+    const uint32_t elapsed =
+        static_cast<uint32_t>(now - phaseStartMs);
+
+    const float progress = constrain(
+      static_cast<float>(elapsed) /
+      static_cast<float>(activeTransitionMs),
+      0.0f,
+      1.0f
+    );
+
+    const float eased = smoothStep(progress);
+
+    for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+      currentHeights[channel] =
+          startHeights[channel] +
+          (
+            targetHeights[channel] -
+            startHeights[channel]
+          ) * eased;
+
+      writeHeight(channel, currentHeights[channel]);
+    }
+
+    if (elapsed >= activeTransitionMs) {
+      // Make sure the exact target is reached.
+      for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+        currentHeights[channel] = targetHeights[channel];
+        writeHeight(channel, currentHeights[channel]);
+      }
+
+      transitioning = false;
+      phaseStartMs = now;
+
+      Serial.println("Target reached. Holding image.");
+    }
+  } else {
+    const uint32_t holdElapsed =
+        static_cast<uint32_t>(now - phaseStartMs);
+
+    if (holdElapsed >= HOLD_MS) {
+      const uint8_t nextFrame =
+          (currentFrame + 1) % FRAME_COUNT;
+
+      beginTransition(nextFrame, now);
+    }
+  }
+}
