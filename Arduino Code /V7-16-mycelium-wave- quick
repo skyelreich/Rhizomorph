@@ -1,0 +1,482 @@
+/*
+  MYCELIUM CONTINUOUS IMAGE FLOW
+
+  Board:
+  ESP32S3 Dev Module
+
+  Hardware:
+  ESP32-S3 + PCA9685 + 16 positional servos
+
+  Wiring:
+  GPIO11 -> SDA
+  GPIO12 -> SCL
+  3V3    -> PCA9685 VCC
+  GND    -> PCA9685 GND
+
+  Use an external servo supply connected to V+ and GND.
+  All grounds must be connected together.
+
+  Movement:
+  - Eight image frames
+  - No holds between frames
+  - Continuous cubic interpolation
+  - 1500 ms per frame interval
+  - 180 ms delay between adjacent columns
+  - 12-second repeating cycle
+*/
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+#include <math.h>
+
+// ============================================================
+// 1. HARDWARE
+// ============================================================
+
+constexpr int SDA_PIN = 11;
+constexpr int SCL_PIN = 12;
+
+constexpr uint8_t PCA_ADDRESS = 0x40;
+
+constexpr uint8_t GRID_ROWS = 4;
+constexpr uint8_t GRID_COLS = 4;
+
+constexpr uint8_t SERVO_COUNT =
+    GRID_ROWS * GRID_COLS;
+
+constexpr uint8_t FRAME_COUNT = 8;
+
+Adafruit_PWMServoDriver pwm(PCA_ADDRESS);
+
+// Channel layout:
+//
+//  0   1   2   3
+//  4   5   6   7
+//  8   9  10  11
+// 12  13  14  15
+
+// ============================================================
+// 2. ORIGINAL IMAGE DATA
+// ============================================================
+
+// Analysis levels: 0, 5, 10, 15, 20.
+// These are not angles or direct height percentages.
+
+const uint8_t imageLevels
+    [FRAME_COUNT][GRID_ROWS][GRID_COLS] = {
+
+  // IMAGE 1
+  {
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 2
+  {
+    { 0,  5,  0, 0},
+    { 0,  5,  5, 0},
+    { 0,  0,  0, 0},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 3
+  {
+    { 0,  5,  5, 0},
+    { 0, 10,  5, 0},
+    { 0,  5,  5, 0},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 4
+  {
+    { 0, 10,  5, 0},
+    { 0, 15, 10, 0},
+    { 0, 10, 10, 5},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 5
+  {
+    { 0, 10, 10, 0},
+    { 0, 20, 10, 0},
+    { 0, 10, 15, 5},
+    { 0,  0,  0, 0}
+  },
+
+  // IMAGE 6
+  {
+    { 5, 10, 10, 0},
+    { 5, 20, 15, 0},
+    { 0, 20, 20, 0},
+    { 0,  0,  5, 0}
+  },
+
+  // IMAGE 7
+  {
+    { 5, 10, 10, 0},
+    { 5, 20, 15, 0},
+    { 0, 20, 20, 5},
+    { 0,  5, 10, 0}
+  },
+
+  // IMAGE 8
+  {
+    {10, 15, 15, 0},
+    {10, 20, 20, 0},
+    { 5, 20, 20, 5},
+    { 0,  5, 10, 0}
+  }
+};
+
+// ============================================================
+// 3. HEIGHT MAPPING
+// ============================================================
+
+// true:
+// 0      -> 0%
+// 5, 10  -> 50%
+// 15, 20 -> 100%
+//
+// false:
+// 0  -> 0%
+// 5  -> 25%
+// 10 -> 50%
+// 15 -> 75%
+// 20 -> 100%
+
+constexpr bool USE_THREE_HEIGHTS = true;
+
+float levelToHeight(uint8_t level) {
+  if (USE_THREE_HEIGHTS) {
+    if (level == 0) {
+      return 0.0f;
+    }
+
+    if (level <= 10) {
+      return 0.5f;
+    }
+
+    return 1.0f;
+  }
+
+  return level / 20.0f;
+}
+
+// ============================================================
+// 4. SERVO CALIBRATION
+// ============================================================
+
+// Pulse widths in MICROSECONDS.
+// Retains the previous initial test range.
+//
+// Calibrate to the physical mechanism.
+// For a reversed linkage, swap that channel's bottom/top values.
+
+const uint16_t bottomPulseUs[SERVO_COUNT] = {
+  1300, 1300, 1300, 1300,
+  1300, 1300, 1300, 1300,
+  1300, 1300, 1300, 1300,
+  1300, 1300, 1300, 1300
+};
+
+const uint16_t topPulseUs[SERVO_COUNT] = {
+  1700, 1700, 1700, 1700,
+  1700, 1700, 1700, 1700,
+  1700, 1700, 1700, 1700,
+  1700, 1700, 1700, 1700
+};
+
+// ============================================================
+// 5. MOVEMENT SETTINGS
+// ============================================================
+
+// Time between consecutive image targets.
+// Smaller = faster.
+constexpr uint32_t FRAME_INTERVAL_MS = 1500;
+
+// Delay between neighbouring columns.
+// Set to 0 for synchronized image shapes.
+constexpr uint32_t COLUMN_DELAY_MS = 180;
+
+// Servo target update interval.
+constexpr uint32_t UPDATE_INTERVAL_MS = 20;
+
+// Gradually introduce motion at startup.
+constexpr uint32_t FADE_IN_MS = 2500;
+
+// Used once during startup only.
+constexpr uint32_t STARTUP_CHANNEL_DELAY_MS = 150;
+
+constexpr uint32_t LOOP_MS =
+    FRAME_COUNT * FRAME_INTERVAL_MS;
+
+static_assert(
+  FRAME_INTERVAL_MS > 0,
+  "Invalid frame interval."
+);
+
+static_assert(
+  FADE_IN_MS > 0,
+  "Invalid fade-in time."
+);
+
+// ============================================================
+// 6. RUNTIME STATE
+// ============================================================
+
+float frameHeights[FRAME_COUNT][SERVO_COUNT];
+float frameSlopes[FRAME_COUNT][SERVO_COUNT];
+
+uint16_t lastPulseUs[SERVO_COUNT] = {0};
+
+uint32_t lastClockMs = 0;
+uint32_t lastUpdateMs = 0;
+uint32_t loopClockMs = 0;
+uint32_t startupElapsedMs = 0;
+
+// ============================================================
+// 7. PREPARE CONTINUOUS CURVES
+// ============================================================
+
+void fatalError(const char* message) {
+  while (true) {
+    Serial.println(message);
+    delay(2000);
+  }
+}
+
+void prepareCurves() {
+  // Convert image levels into normalized heights.
+  for (uint8_t frame = 0; frame < FRAME_COUNT; frame++) {
+    for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+      const uint8_t row = channel / GRID_COLS;
+      const uint8_t col = channel % GRID_COLS;
+
+      const uint8_t level =
+          imageLevels[frame][row][col];
+
+      if (
+        level != 0 &&
+        level != 5 &&
+        level != 10 &&
+        level != 15 &&
+        level != 20
+      ) {
+        fatalError("Invalid image level.");
+      }
+
+      frameHeights[frame][channel] =
+          levelToHeight(level);
+    }
+  }
+
+  // Periodic monotone cubic tangents.
+  //
+  // Continue smoothly through changing image targets.
+  // At a peak, trough or constant section, use zero slope
+  // to prevent overshoot beyond the image targets.
+  //
+  // The last frame connects back to the first.
+
+  for (uint8_t frame = 0; frame < FRAME_COUNT; frame++) {
+    const uint8_t previous =
+        (frame + FRAME_COUNT - 1) % FRAME_COUNT;
+
+    const uint8_t next =
+        (frame + 1) % FRAME_COUNT;
+
+    for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+      const float left =
+          frameHeights[frame][channel] -
+          frameHeights[previous][channel];
+
+      const float right =
+          frameHeights[next][channel] -
+          frameHeights[frame][channel];
+
+      if (left * right > 0.0f) {
+        frameSlopes[frame][channel] =
+            2.0f * left * right / (left + right);
+      } else {
+        frameSlopes[frame][channel] = 0.0f;
+      }
+    }
+  }
+}
+
+// ============================================================
+// 8. SAMPLE ONE PILLAR'S CURRENT HEIGHT
+// ============================================================
+
+float sampleHeight(uint8_t channel, uint32_t timeMs) {
+  const uint8_t col = channel % GRID_COLS;
+
+  const uint32_t offset =
+      (
+        static_cast<uint32_t>(col) *
+        COLUMN_DELAY_MS
+      ) % LOOP_MS;
+
+  const uint32_t localTime =
+      (timeMs + LOOP_MS - offset) % LOOP_MS;
+
+  const uint8_t frame =
+      localTime / FRAME_INTERVAL_MS;
+
+  const uint8_t next =
+      (frame + 1) % FRAME_COUNT;
+
+  const float u =
+      static_cast<float>(
+        localTime % FRAME_INTERVAL_MS
+      ) / FRAME_INTERVAL_MS;
+
+  const float u2 = u * u;
+  const float u3 = u2 * u;
+
+  // Cubic Hermite interpolation.
+  const float height =
+      (2.0f * u3 - 3.0f * u2 + 1.0f) *
+        frameHeights[frame][channel] +
+
+      (u3 - 2.0f * u2 + u) *
+        frameSlopes[frame][channel] +
+
+      (-2.0f * u3 + 3.0f * u2) *
+        frameHeights[next][channel] +
+
+      (u3 - u2) *
+        frameSlopes[next][channel];
+
+  return constrain(height, 0.0f, 1.0f);
+}
+
+// ============================================================
+// 9. SEND HEIGHT TO SERVO
+// ============================================================
+
+void writeHeight(uint8_t channel, float height) {
+  height = constrain(height, 0.0f, 1.0f);
+
+  const float bottom =
+      static_cast<float>(bottomPulseUs[channel]);
+
+  const float top =
+      static_cast<float>(topPulseUs[channel]);
+
+  const uint16_t pulseUs =
+      static_cast<uint16_t>(
+        lroundf(
+          bottom + height * (top - bottom)
+        )
+      );
+
+  if (pulseUs != lastPulseUs[channel]) {
+    pwm.writeMicroseconds(channel, pulseUs);
+    lastPulseUs[channel] = pulseUs;
+  }
+}
+
+// ============================================================
+// 10. SETUP
+// ============================================================
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  prepareCurves();
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.setClock(100000);
+
+  Wire.beginTransmission(PCA_ADDRESS);
+
+  if (Wire.endTransmission() != 0) {
+    fatalError(
+      "PCA9685 not found at 0x40. Check wiring and logic power."
+    );
+  }
+
+  if (!pwm.begin()) {
+    fatalError("PCA9685 initialization failed.");
+  }
+
+  pwm.setPWMFreq(50);
+  delay(10);
+
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    pwm.setPWM(channel, 0, 4096);
+  }
+
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    // One-time initialization.
+    // This is not a pause between image frames.
+    //
+    // The initial physical servo position is unknown,
+    // so the first positioning movement can be sudden.
+    writeHeight(channel, 0.0f);
+
+    delay(STARTUP_CHANNEL_DELAY_MS);
+  }
+
+  lastClockMs = millis();
+  lastUpdateMs = lastClockMs;
+
+  Serial.println(
+    "Continuous image flow: no holds, 12-second loop."
+  );
+}
+
+// ============================================================
+// 11. CONTINUOUS ANIMATION
+// ============================================================
+
+void loop() {
+  const uint32_t now = millis();
+
+  const uint32_t dt =
+      now - lastClockMs;
+
+  lastClockMs = now;
+
+  // Maintain continuous timing across millis() rollover.
+  loopClockMs =
+      (loopClockMs + dt % LOOP_MS) % LOOP_MS;
+
+  // Fade-in runs once after startup.
+  if (startupElapsedMs < FADE_IN_MS) {
+    const uint32_t remaining =
+        FADE_IN_MS - startupElapsedMs;
+
+    startupElapsedMs +=
+        (dt < remaining) ? dt : remaining;
+  }
+
+  if (
+    static_cast<uint32_t>(now - lastUpdateMs) <
+    UPDATE_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  lastUpdateMs = now;
+
+  const float progress =
+      static_cast<float>(startupElapsedMs) /
+      FADE_IN_MS;
+
+  const float fade =
+      progress * progress *
+      (3.0f - 2.0f * progress);
+
+  for (uint8_t channel = 0; channel < SERVO_COUNT; channel++) {
+    const float height =
+        sampleHeight(channel, loopClockMs) * fade;
+
+    writeHeight(channel, height);
+  }
+}
